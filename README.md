@@ -1,4 +1,4 @@
-# Smart Bin Vision 🗑️
+# THIS BRANCH IS FOR CAMERA ONLY 🗑️
 
 Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for IoT smart bin deployments with GPS tracking and cloud storage.
 
