@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Model files (too large for git)
+*.pt
+*.onnx
+public/models/*.onnx
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

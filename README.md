@@ -1,38 +1,177 @@
-# Google Maps Platform with React + TypeScript + Vite
+# Smart Bin Vision 🗑️
 
-This template provides a minimal setup to show a Google map powered by the Google Maps JavaScript API in a React app written in TypeScript and runnning in Vite with HMR and some ESLint rules.
+Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for IoT smart bin deployments with GPS tracking and cloud storage.
 
-## Google Maps Platform
+## 🚀 Quick Start
 
-[Google Maps Platform](https://developers.google.com/maps) provides APIs and SDKs for bringing maps and location-based data into web and mobile apps. The [Maps JavaScript API](https://developers.google.com/maps/documentation/javascript) lets you customize maps with your own content and imagery for display on web pages and mobile devices. The Maps JavaScript API features four basic map types (roadmap, satellite, hybrid, and terrain) which you can modify using layers and styles, controls and events, and various services and libraries.
+**Step 1:** Install dependencies
+```bash
+npm install
+```
 
-[@vis.gl/react-google-maps](https://goo.gle/react-google-maps), is a Google-sponsored library for integrating Maps JavaScript API components in a React web app. The package contains React components that correspond to elements in the Maps JavaScript API and hooks to access the map instance and additional libraries, speeding up load times and making the overall codebase easier to manage.
+**Step 2:** Configure environment variables  
+Create `.env.local` in the project root:
+```env
+VITE_MAPS_API_KEY=your_google_maps_api_key_here
+```
+> **Note:** Google Maps API key is optional—only needed for reverse geocoding addresses from GPS coordinates.
 
-## Vite and React plugins
+**Step 3:** Run the development server
+```bash
+npm run dev
+```
 
-Currently, two official plugins are available:
+**Step 4:** Open the app in your browser and grant camera + location permissions when prompted.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## Expanding the ESLint configuration
+## 🧠 Technology Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+| Category | Technology |
+|----------|-----------|
+| **Framework** | React 18 + TypeScript + Vite |
+| **Styling** | Tailwind CSS v3 |
+| **AI Model** | TensorFlow.js COCO-SSD (MobileNet v2) |
+| **Camera** | react-webcam with HTML5 Canvas |
+| **Database** | Firebase Firestore |
+| **Geolocation** | Browser Geolocation API |
 
-- Configure the top-level `parserOptions` property like this:
+### Detection Model Details
+- **Model:** COCO-SSD pre-trained on 80 object classes
+- **Performance:** Real-time detection at ~2 FPS
+- **Smart Filtering:** Automatically suppresses hand/person detections when waste items are present
+- **Categories:** Recyclable, Organic, Paper, General waste
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
+---
+
+## 📊 Firestore Database Structure
+
+### Collection: `detections`
+Stores every detected waste item event:
+```javascript
+{
+  documentId: "BIN-001_2025-11-26T10-30-45_bottle",  // Custom ID
+  binId: "BIN-001",
+  itemClass: "bottle",
+  category: "recyclable",
+  confidence: 87,                    // 0-100
+  timestamp: ServerTimestamp,        // Firestore server time
+  detectedAt: Date                   // Client capture time
 }
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+### Collection: `bins`
+One document per physical bin with metadata and location:
+```javascript
+{
+  binId: "BIN-001",                  // Document ID
+  latitude: 40.7128,
+  longitude: -74.0060,
+  accuracy: 12,                      // GPS accuracy in meters
+  method: "single",                  // "single" or "watch"
+  address: "350 5th Ave, New York",  // Optional (needs Maps API key)
+  updatedAt: ServerTimestamp
+}
+```
+
+---
+
+## 📁 Project Structure
+
+```
+Project-CPC357/
+├── src/
+│   ├── App.tsx              # Root component
+│   ├── TrashDetection.tsx   # Main detection UI & logic
+│   ├── binLocation.ts       # Geolocation utilities
+│   ├── firebase.ts          # Firebase configuration
+│   ├── main.tsx             # React entry point
+│   └── index.css            # Global styles + Tailwind
+├── public/
+│   └── vite.svg
+├── .env.local               # Environment variables (create manually)
+├── package.json
+├── vite.config.ts
+├── tailwind.config.js
+└── README.md
+```
+
+---
+
+## ⚙️ Configuration & Customization
+
+### Change Bin ID
+Edit `src/TrashDetection.tsx`:
+```typescript
+const [binId] = useState('BIN-001');  // Change to BIN-002, BIN-003, etc.
+```
+
+### Adjust Detection Sensitivity
+Modify confidence threshold in `src/TrashDetection.tsx`:
+```typescript
+if (!isSaving && highestConfidence.score > 0.7) {  // Change 0.7 (70%) as needed
+  saveDetectionToFirebase(newDetection);
+}
+```
+
+### Add Continuous Location Tracking
+Implement `watchPosition` in `src/binLocation.ts` for real-time bin movement tracking.
+
+---
+
+## 🔐 Security Recommendations
+
+Currently, Firestore writes are unauthenticated for kiosk deployment. For production:
+
+```javascript
+// Firestore Security Rules (example)
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /detections/{document} {
+      allow write: if true;              // Kiosk write access
+      allow read: if request.auth != null;  // Authenticated read
+    }
+    match /bins/{binId} {
+      allow write: if true;
+      allow read: if request.auth != null;
+    }
+  }
+}
+```
+
+---
+
+## 🚢 Deployment
+
+Build for production:
+```bash
+npm run build
+```
+
+Output will be in `dist/` folder. Deploy to:
+- **Vercel** / **Netlify** (recommended for static hosting)
+- **Firebase Hosting**
+- Any CDN or static web server
+
+**Requirements:**
+- HTTPS is required for camera and geolocation permissions
+- Configure Firebase project credentials in `src/firebase.ts`
+
+---
+
+## 🛠️ Development Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm install` | Install dependencies |
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
+
+---
+
+## 📝 License
+
+See `LICENSE` file for details.
