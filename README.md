@@ -1,8 +1,9 @@
 # THIS BRANCH IS FOR DASHBOARD ONLY 🗑️
 
-Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for IoT smart bin deployments with GPS tracking and cloud storage.
+Web dashboard for real-time monitoring, analytics, and remote control of IoT smart bins. Visualizes bin locations, fill levels, recent detections, and allows officers to send remote commands (e.g., close lid, mark emptied).
 
 ## 🚀 Quick Start
+
 
 **Step 1:** Install dependencies
 ```bash
@@ -14,14 +15,14 @@ Create `.env.local` in the project root:
 ```env
 VITE_MAPS_API_KEY=your_google_maps_api_key_here
 ```
-> **Note:** Google Maps API key is optional—only needed for reverse geocoding addresses from GPS coordinates.
+> **Note:** Google Maps API key is required for map display and address lookup.
 
 **Step 3:** Run the development server
 ```bash
 npm run dev
 ```
 
-**Step 4:** Open the app in your browser and grant camera + location permissions when prompted.
+**Step 4:** Open the app in your browser. No camera or location permissions are needed for dashboard use.
 
 ---
 
@@ -29,28 +30,29 @@ npm run dev
 
 | Category | Technology |
 |----------|-----------|
+
 | **Framework** | React 18 + TypeScript + Vite |
 | **Styling** | Tailwind CSS v3 |
-| **AI Model** | TensorFlow.js COCO-SSD (MobileNet v2) |
-| **Camera** | react-webcam with HTML5 Canvas |
 | **Database** | Firebase Firestore |
-| **Geolocation** | Browser Geolocation API |
+| **Map** | Google Maps API |
 
-### Detection Model Details
-- **Model:** COCO-SSD pre-trained on 80 object classes
-- **Performance:** Real-time detection at ~2 FPS
-- **Smart Filtering:** Automatically suppresses hand/person detections when waste items are present
-- **Categories:** Recyclable, Organic, Paper, General waste
+
+### Dashboard Features
+- Real-time bin status and fill level monitoring
+- Interactive map showing selected bin location
+- Analytics: 24h detection counts, waste category breakdown, top bins
+- Remote control: Close/open lid, mark emptied, flag overflow
+- Mobile-friendly, responsive UI
 
 ---
 
 ## 📊 Firestore Database Structure
 
+
 ### Collection: `detections`
-Stores every detected waste item event:
-```javascript
+Stores every detected waste item event (pushed by camera system):
+```
 {
-  documentId: "BIN-001_2025-11-26T10-30-45_bottle",  // Custom ID
   binId: "BIN-001",
   itemClass: "bottle",
   category: "recyclable",
@@ -62,34 +64,32 @@ Stores every detected waste item event:
 
 ### Collection: `bins`
 One document per physical bin with metadata and location:
-```javascript
+```
 {
   binId: "BIN-001",                  // Document ID
-  latitude: 40.7128,
-  longitude: -74.0060,
-  accuracy: 12,                      // GPS accuracy in meters
-  method: "single",                  // "single" or "watch"
-  address: "350 5th Ave, New York",  // Optional (needs Maps API key)
+  latitude: 3.139,
+  longitude: 101.6869,
+  address: "Somewhere, KL",           // Optional (needs Maps API key)
+  fillLevel: 75,                      // Estimated fill %
   updatedAt: ServerTimestamp
 }
 ```
 
 ---
 
-## 📁 Project Structure
+
+## 📁 Project Structure (Dashboard Only)
 
 ```
-Project-CPC357/
+Project-CPC357_dashboard/
 ├── src/
-│   ├── App.tsx              # Root component
-│   ├── TrashDetection.tsx   # Main detection UI & logic
-│   ├── binLocation.ts       # Geolocation utilities
-│   ├── firebase.ts          # Firebase configuration
-│   ├── main.tsx             # React entry point
-│   └── index.css            # Global styles + Tailwind
+│   ├── App.tsx            # Dashboard root component
+│   ├── BinMap.tsx         # Map visualization for selected bin
+│   ├── firebase.ts        # Firebase configuration
+│   ├── main.tsx           # React entry point
+│   └── index.css          # Global styles + Tailwind
 ├── public/
-│   └── vite.svg
-├── .env.local               # Environment variables (create manually)
+├── .env.local             # Environment variables (create manually)
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.js
@@ -100,28 +100,16 @@ Project-CPC357/
 
 ## ⚙️ Configuration & Customization
 
-### Change Bin ID
-Edit `src/TrashDetection.tsx`:
-```typescript
-const [binId] = useState('BIN-001');  // Change to BIN-002, BIN-003, etc.
-```
 
-### Adjust Detection Sensitivity
-Modify confidence threshold in `src/TrashDetection.tsx`:
-```typescript
-if (!isSaving && highestConfidence.score > 0.7) {  // Change 0.7 (70%) as needed
-  saveDetectionToFirebase(newDetection);
-}
-```
-
-### Add Continuous Location Tracking
-Implement `watchPosition` in `src/binLocation.ts` for real-time bin movement tracking.
+### Change Default Bin Selection
+Edit the dashboard code to set a default bin if desired (see `src/App.tsx`).
 
 ---
 
 ## 🔐 Security Recommendations
 
-Currently, Firestore writes are unauthenticated for kiosk deployment. For production:
+
+Currently, Firestore writes are unauthenticated for IoT/camera deployment. For production:
 
 ```javascript
 // Firestore Security Rules (example)
@@ -154,8 +142,9 @@ Output will be in `dist/` folder. Deploy to:
 - **Firebase Hosting**
 - Any CDN or static web server
 
+
 **Requirements:**
-- HTTPS is required for camera and geolocation permissions
+- HTTPS is required for secure access
 - Configure Firebase project credentials in `src/firebase.ts`
 
 ---
