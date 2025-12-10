@@ -171,7 +171,3 @@ Output will be in `dist/` folder. Deploy to:
 | `npm run lint` | Run ESLint |
 
 ---
-
-## 📝 License
-
-See `LICENSE` file for details.
