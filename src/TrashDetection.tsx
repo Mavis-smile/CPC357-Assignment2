@@ -261,7 +261,7 @@ const TrashDetection = () => {
               </div>
               <div className="text-center sm:text-left">
                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-eco-600 to-recycle-600 bg-clip-text text-transparent flex items-center gap-2">
-                  Smart Bin Vision
+                  Smart Recycle Bin
                   <span className="text-[10px] sm:text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-0.5 rounded-full font-bold">Enhanced AI</span>
                 </h1>
                 <p className="text-[11px] sm:text-xs text-slate-600 mt-1 flex items-center gap-1.5 justify-center sm:justify-start">
