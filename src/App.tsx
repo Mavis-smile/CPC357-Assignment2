@@ -32,10 +32,10 @@ type BinDoc = {
 }
 
 const emptyCategoryCounts: Record<string, number> = {
-  recyclable: 0,
-  organic: 0,
   paper: 0,
-  general: 0,
+  plastic: 0,
+  aluminium: 0,
+  glass: 0,
 }
 
 const formatPercent = (value: number) => `${Math.min(Math.max(value, 0), 100)}%`
@@ -98,14 +98,21 @@ const App = () => {
           const bin = {
             id: doc.id,
             binId: data.binId || doc.id,
-            latitude: data.latitude,
-            longitude: data.longitude,
+            latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+            longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
             fillLevel: data.fillLevel,
             address: data.address || null,
             updatedAt: data.updatedAt?.toDate?.() || null,
           } as BinDoc
           
-          console.log(`[App] Processing bin ${bin.binId}:`, bin)
+          console.log(`[App] Processing bin ${bin.binId}:`, {
+            lat: bin.latitude,
+            lng: bin.longitude,
+            latType: typeof bin.latitude,
+            lngType: typeof bin.longitude,
+            rawLat: data.latitude,
+            rawLng: data.longitude
+          })
           return bin
         })
         
@@ -226,7 +233,7 @@ const App = () => {
         <header className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1">
-              <p className="text-xs sm:text-sm font-semibold text-eco-700">Smart Garbage Sorting</p>
+              <p className="text-xs sm:text-sm font-semibold text-eco-700">Smart Recycle Bin</p>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-slate-900 mt-1">
                 Operations Dashboard
               </h1>
@@ -476,10 +483,10 @@ const StatCard = ({ label, value, accent }: { label: string; value: string; acce
 const CategoryCard = ({ title, counts }: { title: string; counts: Record<string, number> }) => {
   const total = Object.values(counts).reduce((acc, v) => acc + v, 0)
   const entries = [
-    { key: 'recyclable', color: 'from-eco-300 to-eco-500', label: 'Recyclable' },
-    { key: 'organic', color: 'from-amber-300 to-amber-500', label: 'Organic' },
-    { key: 'paper', color: 'from-blue-300 to-blue-500', label: 'Paper' },
-    { key: 'general', color: 'from-slate-300 to-slate-500', label: 'General' },
+    { key: 'paper', color: 'from-blue-300 to-blue-500', label: 'Paper', icon: '📄' },
+    { key: 'plastic', color: 'from-red-300 to-red-500', label: 'Plastic', icon: '🪣' },
+    { key: 'aluminium', color: 'from-gray-300 to-gray-500', label: 'Aluminium', icon: '🥫' },
+    { key: 'glass', color: 'from-cyan-300 to-cyan-500', label: 'Glass', icon: '🍾' },
   ]
 
   return (
@@ -492,12 +499,12 @@ const CategoryCard = ({ title, counts }: { title: string; counts: Record<string,
           return (
             <div key={entry.key} className="space-y-1">
               <div className="flex items-center justify-between text-xs text-slate-800 gap-2">
-                <span className="font-semibold truncate">{entry.label}</span>
-                <span className="text-[10px] font-semibold text-slate-600 whitespace-nowrap">{pct}%</span>
+                <span className="font-semibold truncate">{entry.icon} {entry.label}</span>
+                <span className="text-[10px] font-semibold text-slate-600 whitespace-nowrap">{pct}% ({value})</span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className={`h-full bg-gradient-to-r ${entry.color}`}
+                  className={`h-full bg-gradient-to-r ${entry.color} transition-all duration-300`}
                   style={{ width: `${pct}%` }}
                 />
               </div>

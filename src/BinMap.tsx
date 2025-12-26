@@ -1,5 +1,8 @@
-import { GoogleMap, InfoWindow, LoadScript, Marker as GoogleMarker } from '@react-google-maps/api'
-import { useState, useMemo } from 'react'
+import { GoogleMap, InfoWindow, LoadScript } from '@react-google-maps/api'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+
+// Keep libraries array as a constant outside component to avoid reloading
+const GOOGLE_MAPS_LIBRARIES: ("marker")[] = ['marker']
 
 type BinDoc = {
   id: string
@@ -20,15 +23,29 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
   const apiKey = import.meta.env.VITE_MAPS_API_KEY
   const [activeMarker, setActiveMarker] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [map, setMap] = useState<google.maps.Map | null>(null)
+  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
 
   // Get only the selected bin
   const selectedBinData = useMemo(() => {
     const bin = bins.find(b => b.binId === selectedBin)
+    console.log('[BinMap] Looking for bin:', selectedBin, 'Found:', bin)
+    
     if (!bin) return null
     
     const hasValidCoords = 
       typeof bin.latitude === 'number' && !isNaN(bin.latitude) &&
-      typeof bin.longitude === 'number' && !isNaN(bin.longitude)
+      typeof bin.longitude === 'number' && !isNaN(bin.longitude) &&
+      bin.latitude !== 0 && bin.longitude !== 0
+    
+    console.log('[BinMap] Bin coords check:', {
+      binId: bin.binId,
+      lat: bin.latitude,
+      lng: bin.longitude,
+      latType: typeof bin.latitude,
+      lngType: typeof bin.longitude,
+      hasValidCoords
+    })
     
     return hasValidCoords ? bin : null
   }, [bins, selectedBin])
@@ -36,41 +53,154 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
   // Calculate map center for selected bin only
   const mapCenter = useMemo(() => {
     if (!selectedBinData) {
+      // Default center (Kuala Lumpur)
       return { lat: 3.139, lng: 101.6869 }
     }
-    return { lat: selectedBinData.latitude!, lng: selectedBinData.longitude! }
+    const center = { lat: selectedBinData.latitude!, lng: selectedBinData.longitude! }
+    console.log('[BinMap] Map center:', center)
+    return center
   }, [selectedBinData])
 
-  // Create SVG icon for marker
-  const createMarkerIcon = (isSelected: boolean) => {
-    const color = isSelected ? '#22c55e' : '#fbbf24'
-    const borderColor = isSelected ? '#16a34a' : '#f59e0b'
-    
-    const svg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="14" fill="${color}" stroke="${borderColor}" stroke-width="3"/><circle cx="16" cy="16" r="6" fill="white" opacity="0.8"/></svg>`
-    
-    const encoded = btoa(unescape(encodeURIComponent(svg)))
-    
-    return {
-      url: `data:image/svg+xml;base64,${encoded}`,
-      scaledSize: { width: 32, height: 32 },
-      origin: { x: 0, y: 0 },
-      anchor: { x: 16, y: 16 },
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    console.log('[BinMap] Map instance loaded:', mapInstance)
+    setMap(mapInstance)
+  }, [])
+
+  const onUnmount = useCallback(() => {
+    console.log('[BinMap] Map unmounted')
+    if (markerRef.current) {
+      markerRef.current.map = null
     }
-  }
+    setMap(null)
+  }, [])
 
   const containerStyle = {
     width: '100%',
     height: '500px',
   }
 
-  const mapOptions = {
-    zoom: 14,
-    mapTypeId: 'roadmap' as const,
+  const mapOptions: google.maps.MapOptions = {
+    mapTypeId: 'roadmap',
     fullscreenControl: true,
     zoomControl: true,
     streetViewControl: false,
     mapTypeControl: true,
+    clickableIcons: true,
+    mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement
   }
+
+  // Handle marker click
+  const handleMarkerClick = useCallback(() => {
+    if (selectedBinData) {
+      console.log('[BinMap] Marker clicked for bin:', selectedBinData.binId)
+      setActiveMarker(selectedBinData.binId)
+    }
+  }, [selectedBinData])
+
+  // Create and manage AdvancedMarkerElement
+  useEffect(() => {
+    if (!map || !selectedBinData) {
+      return
+    }
+
+    // Clean up existing marker
+    if (markerRef.current) {
+      markerRef.current.map = null
+      markerRef.current = null
+    }
+
+    // Create custom marker content
+    const markerContent = document.createElement('div')
+    markerContent.style.cssText = `
+      width: 50px;
+      height: 65px;
+      position: relative;
+      cursor: pointer;
+    `
+    markerContent.innerHTML = `
+      <svg width="50" height="65" viewBox="0 0 50 65" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="shadow-${selectedBinData.binId}" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/>
+          </filter>
+        </defs>
+        <path 
+          d="M25 2 C13 2 3 12 3 24 C3 42 25 63 25 63 C25 63 47 42 47 24 C47 12 37 2 25 2 Z" 
+          fill="#22c55e" 
+          stroke="#16a34a" 
+          stroke-width="2.5"
+          filter="url(#shadow-${selectedBinData.binId})"
+        />
+        <circle cx="25" cy="22" r="11" fill="white" opacity="0.95"/>
+        <text 
+          x="25" 
+          y="30" 
+          font-family="Arial, sans-serif" 
+          font-size="22" 
+          text-anchor="middle" 
+          dominant-baseline="middle"
+        >🗑️</text>
+      </svg>
+      <div style="
+        position: absolute;
+        bottom: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+        color: #16a34a;
+        white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        border: 1px solid #e5e7eb;
+      ">${selectedBinData.binId}</div>
+    `
+
+    // Create new AdvancedMarkerElement
+    try {
+      const { AdvancedMarkerElement } = google.maps.marker as any
+      
+      const marker = new AdvancedMarkerElement({
+        map,
+        position: {
+          lat: Number(selectedBinData.latitude),
+          lng: Number(selectedBinData.longitude)
+        },
+        content: markerContent,
+        title: `${selectedBinData.binId} - ${selectedBinData.address || 'No address'}`
+      })
+
+      marker.addListener('click', handleMarkerClick)
+      markerRef.current = marker
+      
+      console.log('[BinMap] AdvancedMarkerElement created at:', {
+        lat: Number(selectedBinData.latitude),
+        lng: Number(selectedBinData.longitude)
+      })
+    } catch (error) {
+      console.error('[BinMap] Failed to create AdvancedMarkerElement:', error)
+    }
+
+    return () => {
+      if (markerRef.current) {
+        markerRef.current.map = null
+        markerRef.current = null
+      }
+    }
+  }, [map, selectedBinData, handleMarkerClick])
+
+  // Log marker position when it changes
+  useMemo(() => {
+    if (selectedBinData) {
+      console.log('[BinMap] Rendering marker at:', {
+        lat: Number(selectedBinData.latitude),
+        lng: Number(selectedBinData.longitude)
+      })
+    }
+    return null
+  }, [selectedBinData])
 
   // Check API key
   if (!apiKey) {
@@ -122,8 +252,11 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
             <p className="text-red-700 text-sm font-semibold">{mapError}</p>
           </div>
         )}
+
         <LoadScript 
           googleMapsApiKey={apiKey}
+          version="beta"
+          libraries={GOOGLE_MAPS_LIBRARIES}
           onLoad={() => console.log('[BinMap] GoogleMaps script loaded')}
           onError={() => {
             setMapError('Failed to load Google Maps API')
@@ -135,39 +268,10 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
             center={mapCenter} 
             zoom={17} 
             options={mapOptions}
-            onLoad={() => {
-              console.log('[BinMap] Map loaded')
-            }}
+            onLoad={onLoad}
+            onUnmount={onUnmount}
           >
-            {selectedBinData && (
-              <GoogleMarker
-                position={{ lat: selectedBinData.latitude!, lng: selectedBinData.longitude! }}
-                title={selectedBinData.binId}
-                icon={createMarkerIcon(true) as any}
-                onClick={() => {
-                  console.log('[BinMap] Selected bin marker clicked:', selectedBinData.binId)
-                  setActiveMarker(selectedBinData.binId)
-                }}
-              >
-                {activeMarker === selectedBinData.binId && (
-                  <InfoWindow onCloseClick={() => setActiveMarker(null)}>
-                    <div className="text-sm text-slate-900 space-y-1 p-2">
-                      <p className="font-bold text-base">{selectedBinData.binId}</p>
-                      {selectedBinData.address && <p className="text-xs text-slate-600">{selectedBinData.address}</p>}
-                      <p className="text-xs text-slate-600">
-                        {selectedBinData.latitude?.toFixed(5)}, {selectedBinData.longitude?.toFixed(5)}
-                      </p>
-                      {selectedBinData.fillLevel !== undefined && (
-                        <p className="text-xs font-semibold text-eco-700">Fill: {Math.round(selectedBinData.fillLevel)}%</p>
-                      )}
-                      {selectedBinData.updatedAt && (
-                        <p className="text-xs text-slate-500">Updated {selectedBinData.updatedAt.toLocaleString()}</p>
-                      )}
-                    </div>
-                  </InfoWindow>
-                )}
-              </GoogleMarker>
-            )}
+            {/* Marker is created via AdvancedMarkerElement in useEffect */}
           </GoogleMap>
         </LoadScript>
       </div>
