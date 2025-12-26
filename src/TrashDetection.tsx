@@ -33,12 +33,12 @@ const TrashDetection = () => {
   // Enhanced detection - filter out person/hand detections when other objects present
   const ignoredClasses = ['person'];
 
-  // Trash categories mapping
+  // Trash categories mapping - only recyclable items (paper, plastic, aluminium, glass)
   const trashCategories = {
-    recyclable: ['bottle', 'cup', 'wine glass', 'cell phone', 'laptop', 'keyboard', 'remote', 'scissors', 'knife', 'fork', 'spoon'],
-    organic: ['banana', 'apple', 'orange', 'broccoli', 'carrot', 'pizza', 'donut', 'cake', 'sandwich', 'hot dog', 'bowl'],
-    paper: ['book'],
-    general: ['teddy bear', 'hair drier', 'toothbrush', 'vase', 'clock']
+    paper: ['book', 'newspaper', 'magazine', 'cardboard', 'notebook', 'paper', 'document', 'envelope', 'box'],
+    plastic: ['bottle', 'plastic bottle', 'cup', 'cup', 'takeout container', 'plastic bag', 'bucket', 'pail', 'container'],
+    aluminium: ['can', 'aluminum can', 'soda can', 'beer can', 'tin can', 'metal can'],
+    glass: ['wine glass', 'glass bottle', 'drinking glass', 'beer glass', 'liquor bottle', 'jar', 'vase']
   };
 
   // Load Enhanced COCO-SSD model with better filtering
@@ -80,7 +80,7 @@ const TrashDetection = () => {
     fetchLocation();
   }, [binId]);
 
-  // Determine trash category
+  // Determine trash category - only recyclable items
   const getTrashCategory = (className: string): string => {
     const lowerClass = className.toLowerCase();
     
@@ -89,7 +89,8 @@ const TrashDetection = () => {
         return category;
       }
     }
-    return 'general';
+    // Return null if item is not in recyclable categories
+    return '';
   };
 
   // Save detection to Firebase
@@ -97,6 +98,12 @@ const TrashDetection = () => {
     setIsSaving(true);
     try {
       const category = getTrashCategory(detection.class);
+      
+      // Only save if it's a recognized recyclable item
+      if (!category) {
+        console.log(`Skipped: ${detection.class} is not a recyclable item`);
+        return;
+      }
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const customDocId = `${binId}_${timestamp}_${detection.class.replace(/\s+/g, '-')}`;
@@ -110,7 +117,7 @@ const TrashDetection = () => {
         timestamp: serverTimestamp(),
         detectedAt: detection.timestamp
       });
-      console.log('Detection saved to Firebase with ID:', customDocId);
+      console.log(`✅ Detection saved: ${detection.class} (${category})`);
     } catch (error) {
       console.error('Error saving to Firebase:', error);
     } finally {
@@ -120,12 +127,7 @@ const TrashDetection = () => {
 
   // Enhanced detection - prioritize objects over persons
   const detectObjects = async () => {
-    if (
-      !model ||
-      !webcamRef.current ||
-      !webcamRef.current.video ||
-      webcamRef.current.video.readyState !== 4
-    ) {
+    if (!model || !webcamRef.current || !webcamRef.current.video || webcamRef.current.video.readyState !== 4) {
       return;
     }
 
@@ -133,44 +135,55 @@ const TrashDetection = () => {
       const video = webcamRef.current.video;
       const predictions = await model.detect(video);
       
-      // Filter and prioritize: if there are non-person objects, ignore person detections
+      // Map predictions
       let filtered = predictions.map(pred => ({
         class: pred.class,
         score: pred.score,
         bbox: pred.bbox as [number, number, number, number]
       }));
       
-      // Check if there are non-person objects
+      // Remove person if other objects exist
       const hasNonPersonObjects = filtered.some(det => !ignoredClasses.includes(det.class));
-      
-      // If non-person objects exist, remove person detections
       if (hasNonPersonObjects) {
         filtered = filtered.filter(det => !ignoredClasses.includes(det.class));
       }
-      
-      // Sort by confidence and keep top detections
+
+      // Keep only recyclable categories
+      filtered = filtered.filter(det => getTrashCategory(det.class) !== '');
+
+      // Sort and limit
       filtered.sort((a, b) => b.score - a.score);
       filtered = filtered.slice(0, 5);
-      
-      // Update current item pill and optionally save
+
       if (filtered.length > 0) {
-        const highestConfidence = filtered[0];
-        setCurrentItem(`${highestConfidence.class} • ${Math.round(highestConfidence.score * 100)}%`);
+        const top = filtered[0];
+        const category = getTrashCategory(top.class);
+        if (category) {
+          const emoji = {
+            paper: '📄',
+            plastic: '🪣',
+            aluminium: '🥫',
+            glass: '🍾'
+          }[category];
 
-        const newDetection: TrashDetection = {
-          class: highestConfidence.class,
-          confidence: Math.round(highestConfidence.score * 100),
-          timestamp: new Date()
-        };
+          setCurrentItem(`${emoji} ${category.charAt(0).toUpperCase() + category.slice(1)} • ${Math.round(top.score * 100)}%`);
 
-        // Only save if confidence is high and not a person
-        if (!isSaving && highestConfidence.score > 0.7 && !ignoredClasses.includes(highestConfidence.class)) {
-          saveDetectionToFirebase(newDetection);
+          const newDetection: TrashDetection = {
+            class: top.class,
+            confidence: Math.round(top.score * 100),
+            timestamp: new Date()
+          };
+
+          if (!isSaving && top.score > 0.7) {
+            await saveDetectionToFirebase(newDetection);
+          }
+        } else {
+          setCurrentItem('');
         }
       } else {
         setCurrentItem('');
       }
-      
+
       drawDetections(filtered);
     } catch (error) {
       console.error('Detection error:', error);
@@ -194,19 +207,24 @@ const TrashDetection = () => {
 
     predictions.forEach(prediction => {
       const [x, y, width, height] = prediction.bbox;
-      
-      // Draw bounding box
+      const category = getTrashCategory(prediction.class);
+      const label = category ? category.charAt(0).toUpperCase() + category.slice(1) : '';
+      const emoji = {
+        paper: '📄',
+        plastic: '🪣',
+        aluminium: '🥫',
+        glass: '🍾'
+      }[category] || '';
+
       ctx.strokeStyle = '#10b981';
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, width, height);
 
-      // Draw label background
       ctx.fillStyle = '#10b981';
-      const text = `${prediction.class} ${Math.round(prediction.score * 100)}%`;
+      const text = `${emoji} ${label} ${Math.round(prediction.score * 100)}%`;
       const textWidth = ctx.measureText(text).width;
       ctx.fillRect(x, y - 25, textWidth + 10, 25);
 
-      // Draw label text
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 16px Inter';
       ctx.fillText(text, x + 5, y - 7);
