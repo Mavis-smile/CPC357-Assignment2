@@ -50,7 +50,7 @@ const BinDetector = () => {
         
         console.log('Loading Enhanced Detection Model...');
         const loadedModel = await cocoSsd.load({
-          base: 'mobilenet_v2' // More accurate than v1
+          base: 'lite_mobilenet_v2' // Faster, smaller backbone
         });
         
         setModel(loadedModel);

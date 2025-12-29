@@ -27,3 +27,5 @@ public/models/*.onnx
 *.njsproj
 *.sln
 *.sw?
+
+*.cache
