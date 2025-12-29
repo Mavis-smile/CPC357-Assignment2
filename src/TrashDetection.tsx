@@ -5,6 +5,7 @@ import '@tensorflow/tfjs-backend-webgl';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { captureAndStoreLocation, BinLocationData } from './binLocation';
+import { publishItemDetection, isMQTTConnected } from './mqttClient';
 
 interface Detection {
   class: string;
@@ -29,9 +30,22 @@ const TrashDetection = () => {
   const [modelError, setModelError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<string>('');
   const [binLocation, setBinLocation] = useState<BinLocationData | null>(null);
+  const [mqttStatus, setMqttStatus] = useState<boolean>(false);
 
   // Enhanced detection - filter out person/hand detections when other objects present
   const ignoredClasses = ['person'];
+  
+  // Check MQTT connection status periodically
+  useEffect(() => {
+    const checkMQTT = () => {
+      setMqttStatus(isMQTTConnected());
+    };
+    
+    checkMQTT();
+    const interval = setInterval(checkMQTT, 3000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Trash categories mapping - only recyclable items (paper, plastic, aluminium, glass)
   const trashCategories = {
@@ -93,7 +107,7 @@ const TrashDetection = () => {
     return '';
   };
 
-  // Save detection to Firebase
+  // Save detection to Firebase AND publish to MQTT for immediate servo control
   const saveDetectionToFirebase = async (detection: TrashDetection) => {
     setIsSaving(true);
     try {
@@ -102,12 +116,30 @@ const TrashDetection = () => {
       // Only save if it's a recognized recyclable item
       if (!category) {
         console.log(`Skipped: ${detection.class} is not a recyclable item`);
+        setIsSaving(false);
         return;
       }
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const customDocId = `${binId}_${timestamp}_${detection.class.replace(/\s+/g, '-')}`;
       
+      // 1. Publish to MQTT for immediate servo control
+      try {
+        await publishItemDetection({
+          binId: binId,
+          category: category,
+          itemClass: detection.class,
+          confidence: detection.confidence,
+          latitude: binLocation?.latitude,
+          longitude: binLocation?.longitude
+        });
+        console.log(`📤 MQTT: Sent to hardware for servo control`);
+      } catch (mqttError) {
+        console.error('⚠️ MQTT publish failed (servo may not move):', mqttError);
+        // Continue to save in Firebase even if MQTT fails
+      }
+      
+      // 2. Save to Firebase for dashboard history
       await addDoc(collection(db, 'detections'), {
         documentId: customDocId,
         binId: binId,
@@ -115,9 +147,10 @@ const TrashDetection = () => {
         category: category,
         confidence: detection.confidence,
         timestamp: serverTimestamp(),
-        detectedAt: detection.timestamp
+        detectedAt: detection.timestamp,
+        address: binLocation?.address || null
       });
-      console.log(`✅ Detection saved: ${detection.class} (${category})`);
+      console.log(`✅ Firebase: Detection saved for dashboard`);
     } catch (error) {
       console.error('Error saving to Firebase:', error);
     } finally {
@@ -285,6 +318,16 @@ const TrashDetection = () => {
             </div>
             
             <div className="flex flex-col items-center gap-2">
+              {/* MQTT Status Indicator */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-xs font-semibold ${
+                mqttStatus 
+                  ? 'bg-green-100 text-green-700 border-green-300' 
+                  : 'bg-red-100 text-red-700 border-red-300'
+              }`}>
+                <span className={`inline-block w-2 h-2 rounded-full ${mqttStatus ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                <span>{mqttStatus ? 'Hardware Connected' : 'Hardware Offline'}</span>
+              </div>
+              
               <div className="flex items-center gap-3">
                 {isModelLoading ? (
                   <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-full border-2 border-amber-300">
