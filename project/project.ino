@@ -10,7 +10,6 @@
  * - 2x SG90 Micro Servo (Rotate container & open bottom lid)
  * - 4x Red LEDs (Bin full indicators)
  * - 4x Green LEDs (Bin available indicators)
- * - 1x 1-Channel Relay Module (External alarm control)
  * - 1x Push Button (Manual reset/alarm acknowledge)
  * - Smartphone (Camera web UI for object detection & GPS location)
  * 
@@ -27,51 +26,48 @@
 #include <ArduinoJson.h>
 
 // ==================== PIN DEFINITIONS ====================
-// Infrared Sensors (Waste level detection) - ADC1 pins for analog reading
-#define IR_PAPER_PIN      1   // GPIO1 (ADC1_CH0)
-#define IR_PLASTIC_PIN    2   // GPIO2 (ADC1_CH1)
-#define IR_ALUMINIUM_PIN  3   // GPIO3 (ADC1_CH2)
-#define IR_GLASS_PIN      4   // GPIO4 (ADC1_CH3)
+// Infrared Sensors (Waste level detection)
+#define IR_PAPER_PIN      6   // GPIO6 (IR1)
+#define IR_PLASTIC_PIN    4   // GPIO4 (IR2)
+#define IR_ALUMINIUM_PIN  42  // GPIO42 (IR3)
+#define IR_GLASS_PIN      7   // GPIO7 (IR4)
 
 // PIR Motion Sensor (Digital)
-#define PIR_PIN           5   // GPIO5
+#define PIR_PIN           15  // GPIO15
 
-// MQ-2 Smoke Sensor (Analog) - ADC1 pin
-#define SMOKE_PIN         6   // GPIO6 (ADC1_CH5)
+// MQ-2 Smoke Sensor (Analog) - A0
+#define SMOKE_PIN         10  // GPIO10 (A0/D10)
 
 // DHT11 Sensor (Digital)
-#define DHT_PIN           7   // GPIO7
+#define DHT_PIN           21  // GPIO21
 #define DHT_TYPE          DHT11
 
 // Servo Motors (PWM)
-#define SERVO_ROTATE_PIN  8   // GPIO8 - Container rotation servo
-#define SERVO_LID_PIN     9   // GPIO9 - Bottom lid opening servo
+#define SERVO_ROTATE_PIN  38  // GPIO38 - Container rotation servo
+#define SERVO_LID_PIN     39  // GPIO39 - Bottom lid opening servo
 
 // Red LEDs (Bin full indicators) - Digital outputs
-#define LED_RED_PAPER_PIN     10  // GPIO10
-#define LED_RED_PLASTIC_PIN   11  // GPIO11
-#define LED_RED_ALUMINIUM_PIN 12  // GPIO12
-#define LED_RED_GLASS_PIN     13  // GPIO13
+#define LED_RED_PAPER_PIN     18  // GPIO18 (SCK)
+#define LED_RED_PLASTIC_PIN   8   // GPIO8
+#define LED_RED_ALUMINIUM_PIN 9   // GPIO9
+#define LED_RED_GLASS_PIN     11  // GPIO11
 
 // Green LEDs (Bin available indicators) - Digital outputs
-#define LED_GREEN_PAPER_PIN     14  // GPIO14
-#define LED_GREEN_PLASTIC_PIN   15  // GPIO15
-#define LED_GREEN_ALUMINIUM_PIN 16  // GPIO16
-#define LED_GREEN_GLASS_PIN     17  // GPIO17
-
-// Relay Module (Digital output)
-#define RELAY_PIN         18  // GPIO18
+#define LED_GREEN_PAPER_PIN     MOSI  // MOSI pin
+#define LED_GREEN_PLASTIC_PIN   16    // GPIO16
+#define LED_GREEN_ALUMINIUM_PIN 17    // GPIO17
+#define LED_GREEN_GLASS_PIN     1     // GPIO1
 
 // Push Button (Digital input with pull-up)
-#define BUTTON_PIN        21  // GPIO21
+#define BUTTON_PIN        14  // GPIO14
 
 // Buzzer (Built-in PWM) - No external pin needed, using internal
 #define BUZZER_PIN        48  // Built-in buzzer on Maker Feather AIoT S3
 
 // ==================== WIFI & MQTT CONFIGURATION ====================
-const char* WIFI_SSID = "YOUR_WIFI_SSID";           // Replace with your WiFi SSID
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";   // Replace with your WiFi password
-const char* MQTT_SERVER = "YOUR_GCP_VM_IP";         // Replace with your GCP VM IP
+const char* WIFI_SSID = "LOL";           // Replace with your WiFi SSID
+const char* WIFI_PASSWORD = "ndclosbmee";   // Replace with your WiFi password
+const char* MQTT_SERVER = "34.63.169.195";         // Replace with your GCP VM IP
 const int MQTT_PORT = 1883;
 const char* MQTT_CLIENT_ID = "SmartRecycleBin_ESP32";
 
@@ -243,9 +239,6 @@ void setupPins() {
   pinMode(LED_GREEN_ALUMINIUM_PIN, OUTPUT);
   pinMode(LED_GREEN_GLASS_PIN, OUTPUT);
   
-  // Relay as OUTPUT
-  pinMode(RELAY_PIN, OUTPUT);
-  
   // Buzzer as OUTPUT
   pinMode(BUZZER_PIN, OUTPUT);
   
@@ -259,9 +252,6 @@ void setupPins() {
   digitalWrite(LED_GREEN_PLASTIC_PIN, HIGH);
   digitalWrite(LED_GREEN_ALUMINIUM_PIN, HIGH);
   digitalWrite(LED_GREEN_GLASS_PIN, HIGH);
-  
-  // Relay off initially
-  digitalWrite(RELAY_PIN, LOW);
 }
 
 // ==================== WIFI CONNECTION ====================
@@ -426,7 +416,6 @@ void handleCommand(String message) {
     inFireCooldown = true;
     fireCooldownStart = millis();
     noTone(BUZZER_PIN);
-    digitalWrite(RELAY_PIN, LOW);  // Turn off relay
     
     // Turn off all red LEDs during cooldown
     digitalWrite(LED_RED_PAPER_PIN, LOW);
@@ -495,7 +484,6 @@ void checkPushButton(unsigned long currentMillis) {
       inFireCooldown = true;
       fireCooldownStart = currentMillis;
       noTone(BUZZER_PIN);
-      digitalWrite(RELAY_PIN, LOW);
       
       // Turn off all red LEDs
       digitalWrite(LED_RED_PAPER_PIN, LOW);
@@ -604,9 +592,6 @@ void checkFireConditions(unsigned long currentMillis) {
       fireAlertActive = true;
       Serial.println("!!! FIRE ALERT TRIGGERED !!!");
       
-      // Activate relay for external alarm
-      digitalWrite(RELAY_PIN, HIGH);
-      
       // Publish alert to MQTT immediately
       publishFireAlert();
     }
@@ -636,7 +621,6 @@ void checkFireConditions(unsigned long currentMillis) {
   } else {
     if (fireAlertActive) {
       fireAlertActive = false;
-      digitalWrite(RELAY_PIN, LOW);
       noTone(BUZZER_PIN);
       Serial.println("Fire alert cleared");
     }
