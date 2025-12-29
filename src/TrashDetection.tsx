@@ -31,6 +31,9 @@ const TrashDetection = () => {
   const [locationStatus, setLocationStatus] = useState<string>('');
   const [binLocation, setBinLocation] = useState<BinLocationData | null>(null);
   const [mqttStatus, setMqttStatus] = useState<boolean>(false);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const cooldownDuration = 8000; // 8 seconds cooldown after detection
 
   // Enhanced detection - filter out person/hand detections when other objects present
   const ignoredClasses = ['person'];
@@ -46,6 +49,23 @@ const TrashDetection = () => {
     
     return () => clearInterval(interval);
   }, []);
+
+  // Cooldown timer - update remaining time every 100ms
+  useEffect(() => {
+    if (!isInCooldown) return;
+
+    const interval = setInterval(() => {
+      setCooldownRemaining(prev => {
+        if (prev <= 100) {
+          setIsInCooldown(false);
+          return 0;
+        }
+        return prev - 100;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isInCooldown]);
 
   // Trash categories mapping - only recyclable items (paper, plastic, aluminium, glass)
   const trashCategories = {
@@ -151,6 +171,10 @@ const TrashDetection = () => {
         address: binLocation?.address || null
       });
       console.log(`✅ Firebase: Detection saved for dashboard`);
+      
+      // Start cooldown after successful save
+      setIsInCooldown(true);
+      setCooldownRemaining(cooldownDuration);
     } catch (error) {
       console.error('Error saving to Firebase:', error);
     } finally {
@@ -160,6 +184,11 @@ const TrashDetection = () => {
 
   // Enhanced detection - prioritize objects over persons
   const detectObjects = async () => {
+    // Skip detection if in cooldown period
+    if (isInCooldown) {
+      return;
+    }
+
     if (!model || !webcamRef.current || !webcamRef.current.video || webcamRef.current.video.readyState !== 4) {
       return;
     }
@@ -207,7 +236,8 @@ const TrashDetection = () => {
             timestamp: new Date()
           };
 
-          if (!isSaving && top.score > 0.7) {
+          // Only save if not already saving and not in cooldown
+          if (!isSaving && !isInCooldown && top.score > 0.7) {
             await saveDetectionToFirebase(newDetection);
           }
         } else {
@@ -273,7 +303,7 @@ const TrashDetection = () => {
 
       return () => clearInterval(interval);
     }
-  }, [model, isModelLoading, isSaving]);
+  }, [model, isModelLoading, isSaving, isInCooldown]);
 
   /* category color/icon helpers removed in single-screen minimal view */
 
@@ -354,6 +384,17 @@ const TrashDetection = () => {
                   </div>
                 )}
               </div>
+              
+              {/* Cooldown indicator */}
+              {isInCooldown && (
+                <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-full border-2 border-amber-300 animate-pulse">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
+                  </svg>
+                  <span className="text-sm font-semibold">Next detection in {(cooldownRemaining / 1000).toFixed(1)}s</span>
+                </div>
+              )}
+              
               {/* Status hint removed per request */}
             </div>
           </div>
@@ -396,8 +437,23 @@ const TrashDetection = () => {
                   ref={canvasRef}
                   className="absolute top-0 left-0 w-full h-full"
                 />
+                
+                {/* Cooldown overlay - prominently displayed */}
+                {isInCooldown && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-gradient-to-br from-amber-400 to-orange-500 text-white px-8 py-6 rounded-3xl shadow-2xl border-4 border-white/30 text-center animate-pulse">
+                      <svg className="w-16 h-16 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
+                      </svg>
+                      <p className="text-2xl font-bold mb-2">Processing Item...</p>
+                      <p className="text-5xl font-bold tabular-nums">{(cooldownRemaining / 1000).toFixed(1)}s</p>
+                      <p className="text-sm mt-2 opacity-90">Next detection available soon</p>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Minimal detected item pill */}
-                {currentItem && (
+                {currentItem && !isInCooldown && (
                   <div className="absolute top-3 right-3 bg-eco-500/90 text-white px-2.5 py-1 rounded-full text-[11px] shadow-md">
                     {currentItem}
                   </div>
