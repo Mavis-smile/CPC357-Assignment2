@@ -9,7 +9,7 @@ type BinDoc = {
   binId: string
   latitude?: number
   longitude?: number
-  fillLevel?: number
+  fillLevels?: number[] // Array of 4 sensor readings (0-100%)
   address?: string | null
   updatedAt?: Date | null
 }

@@ -26,9 +26,14 @@ type BinDoc = {
   binId: string
   latitude?: number
   longitude?: number
-  fillLevel?: number
+  fillLevels?: number[] // Array of 4 sensor readings (0-100%)
   address?: string | null
   updatedAt?: Date | null
+  temperature?: number
+  humidity?: number
+  smokeLevel?: number
+  fireAlert?: boolean
+  isActive?: boolean
 }
 
 const emptyCategoryCounts: Record<string, number> = {
@@ -100,9 +105,14 @@ const App = () => {
             binId: data.binId || doc.id,
             latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
             longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
-            fillLevel: data.fillLevel,
+            fillLevels: Array.isArray(data.fillLevels) ? data.fillLevels : [0, 0, 0, 0],
             address: data.address || null,
             updatedAt: data.updatedAt?.toDate?.() || null,
+            temperature: data.temperature,
+            humidity: data.humidity,
+            smokeLevel: data.smokeLevel,
+            fireAlert: data.fireAlert || false,
+            isActive: data.isActive || false,
           } as BinDoc
           
           console.log(`[App] Processing bin ${bin.binId}:`, {
@@ -195,14 +205,16 @@ const App = () => {
       .slice(0, 4)
   }, [detections])
 
-  const estimatedFill = useMemo(() => {
-    // Prefer stored fillLevel if present, otherwise derive a soft estimate from recent activity
-    if (selectedBinMeta?.fillLevel !== undefined) {
-      return Math.round(selectedBinMeta.fillLevel)
-    }
-    const base = Math.min(100, Math.round((binDetections.length || 0) * 2.5))
-    return base
-  }, [selectedBinMeta, binDetections.length])
+  const fillLevels = useMemo(() => {
+    // Get individual sensor readings or default to [0, 0, 0, 0]
+    return selectedBinMeta?.fillLevels || [0, 0, 0, 0]
+  }, [selectedBinMeta])
+
+  const avgFillLevel = useMemo(() => {
+    const levels = fillLevels.filter(level => typeof level === 'number')
+    if (levels.length === 0) return 0
+    return Math.round(levels.reduce((sum, level) => sum + level, 0) / levels.length)
+  }, [fillLevels])
 
   const lastEvent = binDetections[0]
 
@@ -268,6 +280,27 @@ const App = () => {
 
           {dataError && <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs sm:text-sm text-red-700 font-semibold">{dataError}</div>}
 
+          {/* Fire Alert Banner */}
+          {selectedBinMeta?.fireAlert && (
+            <div className="bg-red-600 border-2 border-red-700 rounded-xl px-4 py-3 animate-pulse shadow-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🔥</span>
+                <div className="flex-1">
+                  <p className="text-white font-bold text-lg">FIRE ALERT DETECTED!</p>
+                  <p className="text-red-100 text-sm">
+                    Smoke/Heat detected in {selectedBin} - Temperature: {selectedBinMeta.temperature?.toFixed(1) || 'N/A'}°C
+                  </p>
+                </div>
+                <button
+                  onClick={() => sendCommand('reset-alarm')}
+                  className="bg-white text-red-600 px-4 py-2 rounded-lg font-semibold hover:bg-red-50 transition text-sm"
+                >
+                  Reset Alarm
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             <StatCard label="Detections (24h)" value={last24hDetections.length.toString()} accent="from-eco-400 to-eco-600" />
             <StatCard label="Bins monitored" value={binOptions.length.toString()} accent="from-recycle-400 to-recycle-600" />
@@ -276,7 +309,7 @@ const App = () => {
               value={selectedBin || 'Pick bin'}
               accent="from-amber-300 to-amber-500"
             />
-            <StatCard label="Est. fill" value={formatPercent(estimatedFill)} accent="from-slate-400 to-slate-600" />
+            <StatCard label="Avg. fill" value={formatPercent(avgFillLevel)} accent="from-slate-400 to-slate-600" />
           </div>
         </header>
 
@@ -299,23 +332,74 @@ const App = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-eco-200 bg-eco-50 p-3 sm:p-4 shadow-sm">
-                  <p className="text-xs font-semibold text-eco-700">Fill estimate</p>
+              {/* 4 Individual Sensor Readings */}
+              <div className="col-span-full grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {fillLevels.map((level, index) => {
+                  const recycleTypes = [
+                    { name: 'Paper', icon: '📄' },
+                    { name: 'Plastic', icon: '🪣' },
+                    { name: 'Aluminium', icon: '🥫' },
+                    { name: 'Glass', icon: '🍾' }
+                  ]
+                  const recycleType = recycleTypes[index]
+                  const fillValue = typeof level === 'number' ? Math.min(Math.max(level, 0), 100) : 0
+                  const isFull = fillValue >= 50
+                  const colorClass = isFull ? 'border-red-300 bg-red-50' : 'border-eco-200 bg-eco-50'
+                  const textClass = isFull ? 'text-red-700' : 'text-eco-700'
+                  const barClass = isFull ? 'from-red-400 to-red-600' : 'from-eco-400 to-eco-600'
+                  
+                  return (
+                    <div key={index} className={`rounded-xl border ${colorClass} p-3 sm:p-4 shadow-sm`}>
+                      <p className={`text-xs font-semibold ${textClass}`}>{recycleType.icon} {recycleType.name}</p>
+                      <div className="flex items-end justify-between mt-2">
+                        <span className={`text-xl sm:text-2xl font-bold ${textClass.replace('700', '900')}`}>{fillValue}%</span>
+                        <span className="text-lg">{isFull ? '🔴' : '🟢'}</span>
+                      </div>
+                      <div className="mt-2 h-2 w-full rounded-full bg-white/50 overflow-hidden">
+                        <div
+                          className={`h-full bg-gradient-to-r ${barClass} transition-all duration-500`}
+                          style={{ width: `${fillValue}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Environmental Sensors */}
+              <div className="col-span-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
+                  <p className="text-xs font-semibold text-slate-700">🌡️ Temperature</p>
                   <div className="flex items-end justify-between mt-2">
-                    <span className="text-xl sm:text-2xl font-bold text-eco-900">{formatPercent(estimatedFill)}</span>
-                    <span className="text-[10px] text-eco-700">soft est.</span>
+                    <span className="text-xl sm:text-2xl font-bold text-slate-900">
+                      {selectedBinMeta?.temperature?.toFixed(1) || '--'}°C
+                    </span>
+                    <span className="text-[10px] text-slate-600">DHT11</span>
                   </div>
-                  <div className="mt-2 h-2 w-full rounded-full bg-eco-100 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-eco-400 to-eco-600 transition-all duration-500"
-                      style={{ width: formatPercent(estimatedFill) }}
-                    />
-                  </div>
-                  {selectedBinMeta?.updatedAt && (
-                    <p className="text-[10px] text-eco-800 mt-2">Updated {selectedBinMeta.updatedAt.toLocaleString()}</p>
-                  )}
                 </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
+                  <p className="text-xs font-semibold text-slate-700">💧 Humidity</p>
+                  <div className="flex items-end justify-between mt-2">
+                    <span className="text-xl sm:text-2xl font-bold text-slate-900">
+                      {selectedBinMeta?.humidity?.toFixed(1) || '--'}%
+                    </span>
+                    <span className="text-[10px] text-slate-600">DHT11</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
+                  <p className="text-xs font-semibold text-slate-700">💨 Smoke Level</p>
+                  <div className="flex items-end justify-between mt-2">
+                    <span className="text-xl sm:text-2xl font-bold text-slate-900">
+                      {selectedBinMeta?.smokeLevel || 0}
+                    </span>
+                    <span className="text-[10px] text-slate-600">Analog</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
                   <p className="text-xs font-semibold text-slate-700">Last detection</p>
@@ -329,6 +413,16 @@ const App = () => {
                   ) : (
                     <p className="mt-2 text-xs text-slate-600">No events yet for this bin.</p>
                   )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
+                  <p className="text-xs font-semibold text-slate-700">Bin Activity</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${selectedBinMeta?.isActive ? 'bg-eco-100 text-eco-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {selectedBinMeta?.isActive ? '🟢 ACTIVE' : '⚪ IDLE'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-600">PIR sensor status</p>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
@@ -385,32 +479,32 @@ const App = () => {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
                 <ActionButton
-                  label="Close lid"
-                  description="Prevent overflow"
-                  accent="from-eco-400 to-eco-600"
+                  label="Reset alarm"
+                  description="Stop buzzer & LED"
+                  accent="from-red-400 to-red-600"
                   disabled={!selectedBin || isSendingCmd}
-                  onClick={() => sendCommand('close-lid')}
-                />
-                <ActionButton
-                  label="Re-open"
-                  description="Allow drop-off"
-                  accent="from-recycle-400 to-recycle-600"
-                  disabled={!selectedBin || isSendingCmd}
-                  onClick={() => sendCommand('open-lid')}
-                />
-                <ActionButton
-                  label="Flag overflow"
-                  description="Alert crew"
-                  accent="from-amber-300 to-amber-500"
-                  disabled={!selectedBin || isSendingCmd}
-                  onClick={() => sendCommand('flag-overflow')}
+                  onClick={() => sendCommand('reset-alarm')}
                 />
                 <ActionButton
                   label="Mark emptied"
-                  description="Reset counter"
-                  accent="from-slate-400 to-slate-600"
+                  description="Reset fill levels"
+                  accent="from-eco-400 to-eco-600"
                   disabled={!selectedBin || isSendingCmd}
                   onClick={() => sendCommand('mark-emptied')}
+                />
+                <ActionButton
+                  label="Test servo"
+                  description="Cycle positions"
+                  accent="from-recycle-400 to-recycle-600"
+                  disabled={!selectedBin || isSendingCmd}
+                  onClick={() => sendCommand('test-servo')}
+                />
+                <ActionButton
+                  label="Maintenance"
+                  description="Disable sensors"
+                  accent="from-amber-400 to-amber-600"
+                  disabled={!selectedBin || isSendingCmd}
+                  onClick={() => sendCommand('maintenance-mode')}
                 />
               </div>
               {actionMessage && <p className="text-xs sm:text-sm text-eco-700 bg-eco-50 px-3 py-2 rounded-lg">{actionMessage}</p>}
