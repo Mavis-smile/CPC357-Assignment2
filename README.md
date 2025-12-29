@@ -264,7 +264,7 @@ mosquitto_pub -h localhost -t "test" -m "Hello MQTT"
 
 ```bash
 # Add Node.js 18 repository
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 
 # Install Node.js
 sudo apt install -y nodejs
