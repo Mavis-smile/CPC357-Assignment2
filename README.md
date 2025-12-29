@@ -50,8 +50,8 @@ npm run dev
 Stores every detected waste item event:
 ```javascript
 {
-  documentId: "BIN-001_2025-11-26T10-30-45_bottle",  // Custom ID
-  binId: "BIN-001",
+  documentId: "BIN001_2025-11-26T10-30-45_bottle",  // Custom ID
+  binId: "BIN001",
   itemClass: "bottle",
   category: "recyclable",
   confidence: 87,                    // 0-100
@@ -64,7 +64,7 @@ Stores every detected waste item event:
 One document per physical bin with metadata and location:
 ```javascript
 {
-  binId: "BIN-001",                  // Document ID
+  binId: "BIN001",                  // Document ID
   latitude: 40.7128,
   longitude: -74.0060,
   accuracy: 12,                      // GPS accuracy in meters
@@ -103,7 +103,7 @@ Project-CPC357/
 ### Change Bin ID
 Edit `src/TrashDetection.tsx`:
 ```typescript
-const [binId] = useState('BIN-001');  // Change to BIN-002, BIN-003, etc.
+const [binId] = useState('BIN001');  // Change to BIN002, BIN003, etc.
 ```
 
 ### Adjust Detection Sensitivity

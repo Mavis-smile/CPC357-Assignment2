@@ -26,7 +26,7 @@ const TrashDetection = () => {
   const [isModelLoading, setIsModelLoading] = useState(true);
   const [currentItem, setCurrentItem] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
-  const [binId] = useState('BIN-001');
+  const [binId] = useState('BIN001');
   const [modelError, setModelError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<string>('');
   const [binLocation, setBinLocation] = useState<BinLocationData | null>(null);
