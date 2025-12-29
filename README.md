@@ -53,7 +53,7 @@ npm run dev
 Stores every detected waste item event (pushed by camera system):
 ```
 {
-  binId: "BIN-001",
+  binId: "BIN001",
   itemClass: "bottle",
   category: "recyclable",
   confidence: 87,                    // 0-100
@@ -66,7 +66,7 @@ Stores every detected waste item event (pushed by camera system):
 One document per physical bin with metadata and location:
 ```
 {
-  binId: "BIN-001",                  // Document ID
+  binId: "BIN001",                  // Document ID
   latitude: 3.139,
   longitude: 101.6869,
   address: "Somewhere, KL",           // Optional (needs Maps API key)
