@@ -94,7 +94,7 @@ A complete IoT solution for intelligent waste management that:
                                     ┌────────────────────────┐
                                     │  Dashboard Web UI      │
                                     │  (React - Vite)        │
-                                    │  Project-CPC357_dash   │
+                                    │  Project-CPC357_dashboard │
                                     │  - Real-time monitor   │
                                     │  - Remote control      │
                                     │  - Alerts & analytics  │
@@ -386,9 +386,13 @@ Tools > Manage Libraries > Search and install:
 
 #### Step 6️⃣: Configure & Upload project.ino
 
-**Open project.ino in Arduino IDE**
+**Open firmware in Arduino IDE**
 
-**Edit WiFi and MQTT Settings (lines 40-50):**
+Open the firmware file at:
+
+Project-CPC357_hardware/project/project.ino
+
+**Edit WiFi and MQTT Settings:**
 ```cpp
 const char* WIFI_SSID = "YOUR_WIFI_NAME";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
@@ -455,6 +459,8 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abcdef...
 VITE_FIREBASE_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
+Note: The camera app uses `BIN001` as the standardized bin identifier to match the hardware firmware and bridge.
+
 **Run locally:**
 ```bash
 npm run dev
@@ -463,6 +469,8 @@ npm run dev
 
 **Or deploy to Firebase Hosting:**
 ```bash
+npm install -g firebase-tools
+firebase login
 npm run build
 firebase deploy
 # Access from: https://your-project.web.app
@@ -478,6 +486,11 @@ npm install
 
 # Verify .env.local exists with Firebase config
 # (Same Firebase config as camera app)
+```
+
+**Add Google Maps API key to `.env.local`:**
+```env
+VITE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
 ```
 
 **Run locally:**
