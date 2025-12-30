@@ -229,6 +229,14 @@ const App = () => {
         issuedAt: serverTimestamp(),
         status: 'pending',
       })
+      // If resetting alarm, immediately update fireAlert to false in UI
+      if (action === 'reset-alarm') {
+        setBins(prevBins =>
+          prevBins.map(bin =>
+            bin.binId === selectedBin ? { ...bin, fireAlert: false } : bin
+          )
+        )
+      }
       setActionMessage(`${action} command queued for ${selectedBin}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to send command'
