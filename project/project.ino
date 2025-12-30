@@ -29,7 +29,7 @@
 // Infrared Sensors (Waste level detection)
 #define IR_PAPER_PIN      6   // GPIO6 (IR1)
 #define IR_PLASTIC_PIN    4   // GPIO4 (IR2)
-#define IR_ALUMINIUM_PIN  42  // GPIO42 (IR3)
+#define IR_ALUMINIUM_PIN  48  // GPIO42 (IR3)
 #define IR_GLASS_PIN      7   // GPIO7 (IR4)
 
 // PIR Motion Sensor (Digital)
@@ -43,7 +43,7 @@
 #define DHT_TYPE          DHT11
 
 // Servo Motors (PWM)
-#define SERVO_ROTATE_PIN  38  // GPIO38 - Container rotation servo
+#define SERVO_ROTATE_PIN  5  // GPIO5 - Container rotation servo
 #define SERVO_LID_PIN     39  // GPIO39 - Bottom lid opening servo
 
 // Red LEDs (Bin full indicators) - Digital outputs
@@ -62,12 +62,12 @@
 #define BUTTON_PIN        14  // GPIO14
 
 // Buzzer (Built-in PWM) - No external pin needed, using internal
-#define BUZZER_PIN        48  // Built-in buzzer on Maker Feather AIoT S3
+#define BUZZER_PIN        12  // Built-in buzzer on Maker Feather AIoT S3
 
 // ==================== WIFI & MQTT CONFIGURATION ====================
-const char* WIFI_SSID = "LOL";           // Replace with your WiFi SSID
-const char* WIFI_PASSWORD = "ndclosbmee";   // Replace with your WiFi password
-const char* MQTT_SERVER = "34.63.169.195";         // Replace with your GCP VM IP
+const char* WIFI_SSID = "YOUR-WIFI-SSID";           // Replace with your WiFi SSID
+const char* WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";   // Replace with your WiFi password
+const char* MQTT_SERVER = "YOUR-MQTT-SERVER";         // Replace with your GCP VM IP
 const int MQTT_PORT = 1883;
 const char* MQTT_CLIENT_ID = "SmartRecycleBin_ESP32";
 
@@ -85,12 +85,25 @@ Servo rotateServo;  // Container rotation
 Servo lidServo;     // Bottom lid control
 
 // ==================== CONFIGURATION CONSTANTS ====================
-// Servo angles for container rotation (4 bins)
-const int SERVO_ROTATE_PAPER = 45;
-const int SERVO_ROTATE_PLASTIC = 90;
-const int SERVO_ROTATE_ALUMINIUM = 135;
-const int SERVO_ROTATE_GLASS = 180;
-const int SERVO_ROTATE_NEUTRAL = 90;
+// Circular bin with 4 compartments (square layout)
+// Neutral position: 90° (straight up)
+// Layout:
+//        TOP (90°)
+//   TL       TR
+// 135°   90°   45°
+//        
+// L(180°)     R(0°)
+//
+// BL       BR
+// 135°   90°   45°
+//        BOT
+
+// Servo angles for container rotation (4 compartments - square layout)
+const int SERVO_ROTATE_NEUTRAL = 90;      // Center/straight up
+const int SERVO_ROTATE_TOP_RIGHT = 45;    // Paper - top right (45° right)
+const int SERVO_ROTATE_BOTTOM_RIGHT = 0;  // Plastic - bottom right (90° right)
+const int SERVO_ROTATE_BOTTOM_LEFT = 180; // Aluminium - bottom left (90° left)
+const int SERVO_ROTATE_TOP_LEFT = 135;    // Glass - top left (45° left)
 
 // Servo angles for lid control
 const int SERVO_LID_OPEN = 90;    // Open bottom to release waste
@@ -350,20 +363,20 @@ void handleItemDetection(String message) {
   
   // Move rotation servo based on category
   if (category == "paper") {
-    rotateServo.write(SERVO_ROTATE_PAPER);
-    Serial.println("Servo → Paper bin (45°)");
+    rotateServo.write(SERVO_ROTATE_TOP_RIGHT);
+    Serial.println("Servo → Paper bin - Top Right (45°)");
   } 
   else if (category == "plastic") {
-    rotateServo.write(SERVO_ROTATE_PLASTIC);
-    Serial.println("Servo → Plastic bin (90°)");
+    rotateServo.write(SERVO_ROTATE_BOTTOM_RIGHT);
+    Serial.println("Servo → Plastic bin - Bottom Right (0°)");
   } 
   else if (category == "aluminium") {
-    rotateServo.write(SERVO_ROTATE_ALUMINIUM);
-    Serial.println("Servo → Aluminium bin (135°)");
+    rotateServo.write(SERVO_ROTATE_BOTTOM_LEFT);
+    Serial.println("Servo → Aluminium bin - Bottom Left (180°)");
   } 
   else if (category == "glass") {
-    rotateServo.write(SERVO_ROTATE_GLASS);
-    Serial.println("Servo → Glass bin (180°)");
+    rotateServo.write(SERVO_ROTATE_TOP_LEFT);
+    Serial.println("Servo → Glass bin - Top Left (135°)");
   } 
   else {
     // Non-recyclable item
@@ -436,17 +449,33 @@ void handleCommand(String message) {
     publishSensorData();  // Immediately publish updated data
   }
   else if (action == "test-servo") {
-    // Cycle through all rotation positions and test lid
-    Serial.println("Testing servos - cycling positions...");
-    rotateServo.write(SERVO_ROTATE_PAPER);
+    // Cycle through all 4 compartments (square layout)
+    Serial.println("Testing servos - cycling through 4 compartments...");
+    
+    // Top Right (Paper) - 45°
+    rotateServo.write(SERVO_ROTATE_TOP_RIGHT);
+    Serial.println("→ Top Right (45°)");
     delay(1000);
-    rotateServo.write(SERVO_ROTATE_PLASTIC);
+    
+    // Bottom Right (Plastic) - 0°
+    rotateServo.write(SERVO_ROTATE_BOTTOM_RIGHT);
+    Serial.println("→ Bottom Right (0°)");
     delay(1000);
-    rotateServo.write(SERVO_ROTATE_ALUMINIUM);
+    
+    // Bottom Left (Aluminium) - 180°
+    rotateServo.write(SERVO_ROTATE_BOTTOM_LEFT);
+    Serial.println("→ Bottom Left (180°)");
     delay(1000);
-    rotateServo.write(SERVO_ROTATE_GLASS);
+    
+    // Top Left (Glass) - 135°
+    rotateServo.write(SERVO_ROTATE_TOP_LEFT);
+    Serial.println("→ Top Left (135°)");
     delay(1000);
+    
+    // Return to neutral
     rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    Serial.println("→ Neutral (90°)");
+    delay(500);
     
     // Test lid servo
     Serial.println("Testing lid servo...");
