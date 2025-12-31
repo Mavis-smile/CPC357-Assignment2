@@ -67,12 +67,11 @@ const TrashDetection = () => {
     return () => clearInterval(interval);
   }, [isInCooldown]);
 
-  // Trash categories mapping - only recyclable items (paper, plastic, aluminium, glass)
+  // Trash categories mapping - recyclable items (glass removed)
   const trashCategories = {
     paper: ['book', 'newspaper', 'magazine', 'cardboard', 'notebook', 'paper', 'document', 'envelope', 'box'],
-    plastic: ['bottle', 'plastic bottle', 'cup', 'cup', 'takeout container', 'plastic bag', 'bucket', 'pail', 'container'],
-    aluminium: ['can', 'aluminum can', 'soda can', 'beer can', 'tin can', 'metal can'],
-    glass: ['wine glass', 'glass bottle', 'drinking glass', 'beer glass', 'liquor bottle', 'jar', 'vase']
+    plastic: ['bottle', 'plastic bottle', 'cup', 'takeout container', 'plastic bag', 'bucket', 'pail', 'container'],
+    aluminium: ['can', 'aluminum can', 'soda can', 'beer can', 'tin can', 'metal can']
   };
 
   // Load Enhanced COCO-SSD model with better filtering
@@ -224,8 +223,7 @@ const TrashDetection = () => {
           const emoji = {
             paper: '📄',
             plastic: '🪣',
-            aluminium: '🥫',
-            glass: '🍾'
+            aluminium: '🥫'
           }[category];
 
           setCurrentItem(`${emoji} ${category.charAt(0).toUpperCase() + category.slice(1)} • ${Math.round(top.score * 100)}%`);
@@ -275,8 +273,7 @@ const TrashDetection = () => {
       const emoji = {
         paper: '📄',
         plastic: '🪣',
-        aluminium: '🥫',
-        glass: '🍾'
+        aluminium: '🥫'
       }[category] || '';
 
       ctx.strokeStyle = '#10b981';
@@ -430,7 +427,7 @@ const TrashDetection = () => {
                   videoConstraints={{
                     width: 1280,
                     height: 720,
-                    facingMode: 'user'
+                    facingMode: { ideal: 'environment' }
                   }}
                 />
                 <canvas
