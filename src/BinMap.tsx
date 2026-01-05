@@ -1,4 +1,4 @@
-import { GoogleMap, InfoWindow, LoadScript } from '@react-google-maps/api'
+import { GoogleMap, LoadScript } from '@react-google-maps/api'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 
 // Keep libraries array as a constant outside component to avoid reloading
@@ -21,7 +21,6 @@ type BinMapProps = {
 
 const BinMap = ({ bins, selectedBin }: BinMapProps) => {
   const apiKey = import.meta.env.VITE_MAPS_API_KEY
-  const [activeMarker, setActiveMarker] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
@@ -93,7 +92,16 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
   const handleMarkerClick = useCallback(() => {
     if (selectedBinData) {
       console.log('[BinMap] Marker clicked for bin:', selectedBinData.binId)
-      setActiveMarker(selectedBinData.binId)
+      const fillLevel = selectedBinData.fillLevels 
+        ? `${Math.round(selectedBinData.fillLevels.reduce((a, b) => a + b, 0) / selectedBinData.fillLevels.length)}%`
+        : 'N/A'
+      alert(
+        `📍 ${selectedBinData.binId}\n\n` +
+        `📍 Address: ${selectedBinData.address || 'No address'}\n` +
+        `🌍 Latitude: ${selectedBinData.latitude?.toFixed(6)}\n` +
+        `🌍 Longitude: ${selectedBinData.longitude?.toFixed(6)}\n` +
+        `📊 Fill Level: ${fillLevel}`
+      )
     }
   }, [selectedBinData])
 

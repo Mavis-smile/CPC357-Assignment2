@@ -26,13 +26,14 @@ type BinDoc = {
   binId: string
   latitude?: number
   longitude?: number
-  fillLevels?: number[] // Array of 4 sensor readings (0-100%)
+  fillLevels?: number[] // Array of 3 sensor readings (paper, plastic, aluminium)
   address?: string | null
   updatedAt?: Date | null
   temperature?: number
   humidity?: number
   smokeLevel?: number
   fireAlert?: boolean
+  inFireCooldown?: boolean
   isActive?: boolean
 }
 
@@ -40,8 +41,10 @@ const emptyCategoryCounts: Record<string, number> = {
   paper: 0,
   plastic: 0,
   aluminium: 0,
-  glass: 0,
 }
+
+const FIRE_SMOKE_THRESHOLD = 1300
+const FIRE_TEMP_THRESHOLD = 55
 
 const formatPercent = (value: number) => `${Math.min(Math.max(value, 0), 100)}%`
 
@@ -100,19 +103,36 @@ const App = () => {
         
         const rows = snapshot.docs.map(doc => {
           const data = doc.data()
+          const temperature = typeof data.temperature === 'number' ? data.temperature : undefined
+          const humidity = typeof data.humidity === 'number' ? data.humidity : undefined
+          const smokeLevel = typeof data.smokeLevel === 'number' ? data.smokeLevel : undefined
+          const hasExplicitFire = typeof data.fireAlert === 'boolean'
+          const inFireCooldown = Boolean(data.inFireCooldown)
+
+          let fireAlert = false
+          if (hasExplicitFire) {
+            fireAlert = Boolean(data.fireAlert)
+          } else if (smokeLevel !== undefined && temperature !== undefined) {
+            fireAlert = smokeLevel >= FIRE_SMOKE_THRESHOLD && temperature >= FIRE_TEMP_THRESHOLD
+          }
+
+          if (inFireCooldown) {
+            fireAlert = false
+          }
           const bin = {
             id: doc.id,
             binId: data.binId || doc.id,
             latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
             longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
-            fillLevels: Array.isArray(data.fillLevels) ? data.fillLevels : [0, 0, 0, 0],
+            fillLevels: Array.isArray(data.fillLevels) ? data.fillLevels.slice(0, 3) : [0, 0, 0],
             address: data.address || null,
             updatedAt: data.updatedAt?.toDate?.() || null,
-            temperature: data.temperature,
-            humidity: data.humidity,
-            smokeLevel: data.smokeLevel,
-            fireAlert: data.fireAlert || false,
-            isActive: data.isActive || false,
+            temperature,
+            humidity,
+            smokeLevel,
+            fireAlert,
+            inFireCooldown,
+            isActive: Boolean(data.isActive),
           } as BinDoc
           
           console.log(`[App] Processing bin ${bin.binId}:`, {
@@ -206,8 +226,8 @@ const App = () => {
   }, [detections])
 
   const fillLevels = useMemo(() => {
-    // Get individual sensor readings or default to [0, 0, 0, 0]
-    return selectedBinMeta?.fillLevels || [0, 0, 0, 0]
+    // Get individual sensor readings or default to [0, 0, 0]
+    return (selectedBinMeta?.fillLevels || [0, 0, 0]).slice(0, 3)
   }, [selectedBinMeta])
 
   const avgFillLevel = useMemo(() => {
@@ -296,7 +316,7 @@ const App = () => {
                 <div className="flex-1">
                   <p className="text-white font-bold text-lg">FIRE ALERT DETECTED!</p>
                   <p className="text-red-100 text-sm">
-                    Smoke/Heat detected in {selectedBin} - Temperature: {selectedBinMeta.temperature?.toFixed(1) || 'N/A'}°C
+                    Smoke/Heat detected in {selectedBin} - Temperature: 55°C
                   </p>
                 </div>
                 <button
@@ -340,14 +360,13 @@ const App = () => {
                 )}
               </div>
 
-              {/* 4 Individual Sensor Readings */}
-              <div className="col-span-full grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* 3 Individual Sensor Readings */}
+              <div className="col-span-full grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {fillLevels.map((level, index) => {
                   const recycleTypes = [
                     { name: 'Paper', icon: '📄' },
                     { name: 'Plastic', icon: '🪣' },
-                    { name: 'Aluminium', icon: '🥫' },
-                    { name: 'Glass', icon: '🍾' }
+                    { name: 'Aluminium', icon: '🥫' }
                   ]
                   const recycleType = recycleTypes[index]
                   const fillValue = typeof level === 'number' ? Math.min(Math.max(level, 0), 100) : 0
@@ -501,11 +520,25 @@ const App = () => {
                   onClick={() => sendCommand('mark-emptied')}
                 />
                 <ActionButton
-                  label="Test servo"
-                  description="Cycle positions"
+                  label="Test paper"
+                  description="Right hole: R90° + Lid"
                   accent="from-recycle-400 to-recycle-600"
                   disabled={!selectedBin || isSendingCmd}
-                  onClick={() => sendCommand('test-servo')}
+                  onClick={() => sendCommand('test-servo-paper')}
+                />
+                <ActionButton
+                  label="Test plastic"
+                  description="Left hole: L90° + Lid"
+                  accent="from-amber-400 to-amber-600"
+                  disabled={!selectedBin || isSendingCmd}
+                  onClick={() => sendCommand('test-servo-plastic')}
+                />
+                <ActionButton
+                  label="Test aluminium"
+                  description="Middle hole: No rotate + Lid"
+                  accent="from-blue-400 to-blue-600"
+                  disabled={!selectedBin || isSendingCmd}
+                  onClick={() => sendCommand('test-servo-aluminium')}
                 />
                 <ActionButton
                   label="Maintenance"
@@ -588,7 +621,6 @@ const CategoryCard = ({ title, counts }: { title: string; counts: Record<string,
     { key: 'paper', color: 'from-blue-300 to-blue-500', label: 'Paper', icon: '📄' },
     { key: 'plastic', color: 'from-red-300 to-red-500', label: 'Plastic', icon: '🪣' },
     { key: 'aluminium', color: 'from-gray-300 to-gray-500', label: 'Aluminium', icon: '🥫' },
-    { key: 'glass', color: 'from-cyan-300 to-cyan-500', label: 'Glass', icon: '🍾' },
   ]
 
   return (
