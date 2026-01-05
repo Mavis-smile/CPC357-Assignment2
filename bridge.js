@@ -97,7 +97,7 @@ mqttClient.on('message', async (topic, message) => {
     
     // ========== SENSOR DATA (from ESP32) ==========
     if (topic === 'smartbin/sensors') {
-      const { binId, fillLevels, temperature, humidity, smokeLevel, isActive } = payload;
+      const { binId, fillLevels, temperature, humidity, smokeLevel, isActive, fireAlert, inFireCooldown } = payload;
       
       if (!binId) {
         console.warn('⚠️  Sensor message missing binId');
@@ -107,16 +107,18 @@ mqttClient.on('message', async (topic, message) => {
       // Update bin document in Firestore
       await db.collection('bins').doc(binId).set({
         binId: binId,
-        fillLevels: fillLevels || [0, 0, 0, 0],
+        fillLevels: fillLevels || [0, 0, 0],
         temperature: temperature || 0,
         humidity: humidity || 0,
         smokeLevel: smokeLevel || 0,
         isActive: isActive || false,
+        fireAlert: fireAlert || false,
+        inFireCooldown: inFireCooldown || false,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
       
       console.log(`✅ Sensor data updated for ${binId}`);
-      console.log(`   Fill: ${fillLevels}, Temp: ${temperature}°C, Smoke: ${smokeLevel}`);
+      console.log(`   Fill: ${fillLevels}, Temp: ${temperature}°C, Smoke: ${smokeLevel}, Fire: ${fireAlert}, Cooldown: ${inFireCooldown}`);
     }
     
     // ========== FIRE ALERT (from ESP32) ==========

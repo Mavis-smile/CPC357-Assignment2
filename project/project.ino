@@ -26,11 +26,10 @@
 #include <ArduinoJson.h>
 
 // ==================== PIN DEFINITIONS ====================
-// Infrared Sensors (Waste level detection)
+// Infrared Sensors (Waste level detection) - 3 active (paper, plastic, aluminium)
 #define IR_PAPER_PIN      6   // GPIO6 (IR1)
 #define IR_PLASTIC_PIN    4   // GPIO4 (IR2)
-#define IR_ALUMINIUM_PIN  48  // GPIO42 (IR3)
-#define IR_GLASS_PIN      7   // GPIO7 (IR4)
+#define IR_ALUMINIUM_PIN  7   // GPIO7 (IR3)
 
 // PIR Motion Sensor (Digital)
 #define PIR_PIN           15  // GPIO15
@@ -43,20 +42,12 @@
 #define DHT_TYPE          DHT11
 
 // Servo Motors (PWM)
-#define SERVO_ROTATE_PIN  5  // GPIO5 - Container rotation servo
-#define SERVO_LID_PIN     39  // GPIO39 - Bottom lid opening servo
+#define SERVO_ROTATE_PIN  39  // GPIO39 - Container rotation servo
+#define SERVO_LID_PIN     5   // GPIO5 - Bottom lid opening servo
 
-// Red LEDs (Bin full indicators) - Digital outputs
-#define LED_RED_PAPER_PIN     18  // GPIO18 (SCK)
-#define LED_RED_PLASTIC_PIN   8   // GPIO8
-#define LED_RED_ALUMINIUM_PIN 9   // GPIO9
-#define LED_RED_GLASS_PIN     11  // GPIO11
-
-// Green LEDs (Bin available indicators) - Digital outputs
-#define LED_GREEN_PAPER_PIN     MOSI  // MOSI pin
-#define LED_GREEN_PLASTIC_PIN   16    // GPIO16
-#define LED_GREEN_ALUMINIUM_PIN 17    // GPIO17
-#define LED_GREEN_GLASS_PIN     1     // GPIO1
+// Single Red/Green LED pair (global indicators)
+#define LED_RED_PIN       17  // GPIO17
+#define LED_GREEN_PIN     8  // GPIO8
 
 // Push Button (Digital input with pull-up)
 #define BUTTON_PIN        14  // GPIO14
@@ -98,25 +89,24 @@ Servo lidServo;     // Bottom lid control
 // 135°   90°   45°
 //        BOT
 
-// Servo angles for container rotation (4 compartments - square layout)
-const int SERVO_ROTATE_NEUTRAL = 90;      // Center/straight up
-const int SERVO_ROTATE_TOP_RIGHT = 45;    // Paper - top right (45° right)
-const int SERVO_ROTATE_BOTTOM_RIGHT = 0;  // Plastic - bottom right (90° right)
-const int SERVO_ROTATE_BOTTOM_LEFT = 180; // Aluminium - bottom left (90° left)
-const int SERVO_ROTATE_TOP_LEFT = 135;    // Glass - top left (45° left)
+// Servo angles for container rotation (3 compartments side-by-side)
+// Left hole: plastic, Middle hole: aluminium, Right hole: paper
+const int SERVO_ROTATE_NEUTRAL   = 90;   // Center/middle hole (aluminium) - no rotation needed
+const int SERVO_ROTATE_LEFT_90   = 0;    // Left 90° for left hole (plastic)
+const int SERVO_ROTATE_RIGHT_90  = 180;  // Right 90° for right hole (paper)
 
 // Servo angles for lid control
-const int SERVO_LID_OPEN = 90;    // Open bottom to release waste
+const int SERVO_LID_OPEN = 180;    // Open bottom to release waste
 const int SERVO_LID_CLOSED = 0;   // Close bottom lid
 
 // IR sensor thresholds (adjust based on your sensor calibration)
 const int IR_THRESHOLD = 500;  // If analog value > threshold, bin is getting full
 
 // MQ-2 Smoke sensor threshold (adjust after 2-3 min warm-up)
-const int SMOKE_THRESHOLD = 300;  // Typical range: 200-400 for smoke detection
+const int SMOKE_THRESHOLD = 1300;  // Fire alert threshold for MQ-2
 
 // Temperature threshold (°C)
-const float TEMP_THRESHOLD = 50.0;
+const float TEMP_THRESHOLD = 55.0;
 
 // Buzzer patterns (in Hz)
 const int BUZZER_FREQ_NON_RECYCLABLE = 1000;
@@ -134,7 +124,7 @@ bool isActive = false;     // Bin operating state (PIR activated)
 bool isMaintenanceMode = false;
 bool fireAlertActive = false;
 bool inFireCooldown = false;  // Cooldown mode after fire reset
-int fillLevels[4] = {0, 0, 0, 0};  // Fill levels for [Paper, Plastic, Aluminium, Glass]
+int fillLevels[3] = {0, 0, 0};  // Fill levels for [Paper, Plastic, Aluminium]
 
 unsigned long lastSensorRead = 0;
 unsigned long lastMqttPublish = 0;
@@ -229,7 +219,6 @@ void setupPins() {
   pinMode(IR_PAPER_PIN, INPUT);
   pinMode(IR_PLASTIC_PIN, INPUT);
   pinMode(IR_ALUMINIUM_PIN, INPUT);
-  pinMode(IR_GLASS_PIN, INPUT);
   
   // PIR sensor as INPUT
   pinMode(PIR_PIN, INPUT);
@@ -240,31 +229,16 @@ void setupPins() {
   // Push button as INPUT_PULLUP
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   
-  // Red LEDs as OUTPUT
-  pinMode(LED_RED_PAPER_PIN, OUTPUT);
-  pinMode(LED_RED_PLASTIC_PIN, OUTPUT);
-  pinMode(LED_RED_ALUMINIUM_PIN, OUTPUT);
-  pinMode(LED_RED_GLASS_PIN, OUTPUT);
-  
-  // Green LEDs as OUTPUT
-  pinMode(LED_GREEN_PAPER_PIN, OUTPUT);
-  pinMode(LED_GREEN_PLASTIC_PIN, OUTPUT);
-  pinMode(LED_GREEN_ALUMINIUM_PIN, OUTPUT);
-  pinMode(LED_GREEN_GLASS_PIN, OUTPUT);
+  // Global LEDs as OUTPUT
+  pinMode(LED_RED_PIN, OUTPUT);
+  pinMode(LED_GREEN_PIN, OUTPUT);
   
   // Buzzer as OUTPUT
   pinMode(BUZZER_PIN, OUTPUT);
   
-  // Set all LEDs to initial state
-  digitalWrite(LED_RED_PAPER_PIN, LOW);
-  digitalWrite(LED_RED_PLASTIC_PIN, LOW);
-  digitalWrite(LED_RED_ALUMINIUM_PIN, LOW);
-  digitalWrite(LED_RED_GLASS_PIN, LOW);
-  
-  digitalWrite(LED_GREEN_PAPER_PIN, HIGH);  // Green on initially
-  digitalWrite(LED_GREEN_PLASTIC_PIN, HIGH);
-  digitalWrite(LED_GREEN_ALUMINIUM_PIN, HIGH);
-  digitalWrite(LED_GREEN_GLASS_PIN, HIGH);
+  // Set LEDs to initial state (available)
+  digitalWrite(LED_RED_PIN, LOW);
+  digitalWrite(LED_GREEN_PIN, HIGH);
 }
 
 // ==================== WIFI CONNECTION ====================
@@ -361,22 +335,20 @@ void handleItemDetection(String message) {
   
   Serial.println("Item detected: " + category);
   
-  // Move rotation servo based on category
-  if (category == "paper") {
-    rotateServo.write(SERVO_ROTATE_TOP_RIGHT);
-    Serial.println("Servo → Paper bin - Top Right (45°)");
-  } 
-  else if (category == "plastic") {
-    rotateServo.write(SERVO_ROTATE_BOTTOM_RIGHT);
-    Serial.println("Servo → Plastic bin - Bottom Right (0°)");
+  // Move rotation servo based on category (3 holes side-by-side)
+  bool needRotation = true;
+  if (category == "plastic") {
+    rotateServo.write(SERVO_ROTATE_LEFT_90);
+    Serial.println("Servo → Plastic bin (left hole) - Rotate left 90°");
   } 
   else if (category == "aluminium") {
-    rotateServo.write(SERVO_ROTATE_BOTTOM_LEFT);
-    Serial.println("Servo → Aluminium bin - Bottom Left (180°)");
+    // Middle hole - no rotation needed, servo already at neutral
+    needRotation = false;
+    Serial.println("Servo → Aluminium bin (middle hole) - No rotation, staying at neutral");
   } 
-  else if (category == "glass") {
-    rotateServo.write(SERVO_ROTATE_TOP_LEFT);
-    Serial.println("Servo → Glass bin - Top Left (135°)");
+  else if (category == "paper") {
+    rotateServo.write(SERVO_ROTATE_RIGHT_90);
+    Serial.println("Servo → Paper bin (right hole) - Rotate right 90°");
   } 
   else {
     // Non-recyclable item
@@ -385,8 +357,10 @@ void handleItemDetection(String message) {
     return;  // Don't open lid for non-recyclable
   }
   
-  // Wait for rotation to complete
-  delay(1000);
+  // Wait for rotation to complete (if rotation was needed)
+  if (needRotation) {
+    delay(1000);
+  }
   
   // Open bottom lid to release waste
   lidServo.write(SERVO_LID_OPEN);
@@ -430,11 +404,9 @@ void handleCommand(String message) {
     fireCooldownStart = millis();
     noTone(BUZZER_PIN);
     
-    // Turn off all red LEDs during cooldown
-    digitalWrite(LED_RED_PAPER_PIN, LOW);
-    digitalWrite(LED_RED_PLASTIC_PIN, LOW);
-    digitalWrite(LED_RED_ALUMINIUM_PIN, LOW);
-    digitalWrite(LED_RED_GLASS_PIN, LOW);
+    // Turn off red LED during cooldown
+    digitalWrite(LED_RED_PIN, LOW);
+    publishSensorData();
     
     Serial.println("Fire alarm reset - Starting 10-minute cooldown");
     Serial.println("Sensors paused to allow smoke to dissipate");
@@ -444,37 +416,31 @@ void handleCommand(String message) {
     fillLevels[0] = 0;
     fillLevels[1] = 0;
     fillLevels[2] = 0;
-    fillLevels[3] = 0;
     Serial.println("Bin marked as emptied - all fill levels reset to 0%");
     publishSensorData();  // Immediately publish updated data
   }
   else if (action == "test-servo") {
-    // Cycle through all 4 compartments (square layout)
-    Serial.println("Testing servos - cycling through 4 compartments...");
+    // Cycle through 3 holes: left, middle (neutral), right
+    Serial.println("Testing servos - cycling through 3 holes (L90, Neutral, R90)...");
     
-    // Top Right (Paper) - 45°
-    rotateServo.write(SERVO_ROTATE_TOP_RIGHT);
-    Serial.println("→ Top Right (45°)");
+    // Left hole - Left 90°
+    rotateServo.write(SERVO_ROTATE_LEFT_90);
+    Serial.println("→ Left hole (0°)");
     delay(1000);
     
-    // Bottom Right (Plastic) - 0°
-    rotateServo.write(SERVO_ROTATE_BOTTOM_RIGHT);
-    Serial.println("→ Bottom Right (0°)");
+    // Middle hole - Neutral (no rotation)
+    rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    Serial.println("→ Middle hole - Neutral (90°)");
     delay(1000);
     
-    // Bottom Left (Aluminium) - 180°
-    rotateServo.write(SERVO_ROTATE_BOTTOM_LEFT);
-    Serial.println("→ Bottom Left (180°)");
-    delay(1000);
-    
-    // Top Left (Glass) - 135°
-    rotateServo.write(SERVO_ROTATE_TOP_LEFT);
-    Serial.println("→ Top Left (135°)");
+    // Right hole - Right 90°
+    rotateServo.write(SERVO_ROTATE_RIGHT_90);
+    Serial.println("→ Right hole (180°)");
     delay(1000);
     
     // Return to neutral
     rotateServo.write(SERVO_ROTATE_NEUTRAL);
-    Serial.println("→ Neutral (90°)");
+    Serial.println("→ Back to Neutral (90°)");
     delay(500);
     
     // Test lid servo
@@ -483,6 +449,37 @@ void handleCommand(String message) {
     delay(1000);
     lidServo.write(SERVO_LID_CLOSED);
     Serial.println("Servo test complete");
+  }
+  else if (action == "test-servo-paper") {
+    Serial.println("Testing paper slot (right hole - R90° + lid)...");
+    rotateServo.write(SERVO_ROTATE_RIGHT_90);
+    delay(1000);
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+    delay(500);
+    rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    Serial.println("Paper test done");
+  }
+  else if (action == "test-servo-plastic") {
+    Serial.println("Testing plastic slot (left hole - L90° + lid)...");
+    rotateServo.write(SERVO_ROTATE_LEFT_90);
+    delay(1000);
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+    delay(500);
+    rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    Serial.println("Plastic test done");
+  }
+  else if (action == "test-servo-aluminium") {
+    Serial.println("Testing aluminium slot (middle hole - no rotation + lid)...");
+    // No rotation needed - already at neutral
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+    delay(500);
+    Serial.println("Aluminium test done");
   }
   else if (action == "maintenance-mode") {
     // Toggle maintenance mode
@@ -514,11 +511,9 @@ void checkPushButton(unsigned long currentMillis) {
       fireCooldownStart = currentMillis;
       noTone(BUZZER_PIN);
       
-      // Turn off all red LEDs
-      digitalWrite(LED_RED_PAPER_PIN, LOW);
-      digitalWrite(LED_RED_PLASTIC_PIN, LOW);
-      digitalWrite(LED_RED_ALUMINIUM_PIN, LOW);
-      digitalWrite(LED_RED_GLASS_PIN, LOW);
+      // Turn off red LED
+      digitalWrite(LED_RED_PIN, LOW);
+      publishSensorData();
       
       Serial.println("[BUTTON] Fire alarm manually reset - 10-min cooldown started");
     } else {
@@ -560,20 +555,17 @@ void readAllSensors() {
   int irPaper = analogRead(IR_PAPER_PIN);
   int irPlastic = analogRead(IR_PLASTIC_PIN);
   int irAluminium = analogRead(IR_ALUMINIUM_PIN);
-  int irGlass = analogRead(IR_GLASS_PIN);
   
   // Convert to percentage (inverted: higher reading = fuller bin)
   // Adjust this formula based on your sensor calibration
   fillLevels[0] = map(irPaper, 0, 4095, 0, 100);
   fillLevels[1] = map(irPlastic, 0, 4095, 0, 100);
   fillLevels[2] = map(irAluminium, 0, 4095, 0, 100);
-  fillLevels[3] = map(irGlass, 0, 4095, 0, 100);
   
   // Constrain values
   fillLevels[0] = constrain(fillLevels[0], 0, 100);
   fillLevels[1] = constrain(fillLevels[1], 0, 100);
   fillLevels[2] = constrain(fillLevels[2], 0, 100);
-  fillLevels[3] = constrain(fillLevels[3], 0, 100);
   
   // Read DHT11
   currentTemp = dht.readTemperature();
@@ -587,7 +579,6 @@ void readAllSensors() {
   Serial.println("Paper fill: " + String(fillLevels[0]) + "%");
   Serial.println("Plastic fill: " + String(fillLevels[1]) + "%");
   Serial.println("Aluminium fill: " + String(fillLevels[2]) + "%");
-  Serial.println("Glass fill: " + String(fillLevels[3]) + "%");
   Serial.println("Temperature: " + String(currentTemp) + "°C");
   Serial.println("Humidity: " + String(currentHumidity) + "%");
   Serial.println("Smoke level: " + String(smokeLevel));
@@ -613,10 +604,9 @@ void checkFireConditions(unsigned long currentMillis) {
     }
   }
   
-  bool smokeDetected = smokeLevel > SMOKE_THRESHOLD;
-  bool heatDetected = currentTemp > TEMP_THRESHOLD;
+  bool fireDetected = smokeLevel > SMOKE_THRESHOLD && currentTemp > TEMP_THRESHOLD;
   
-  if (smokeDetected || heatDetected) {
+  if (fireDetected) {
     if (!fireAlertActive) {
       fireAlertActive = true;
       Serial.println("!!! FIRE ALERT TRIGGERED !!!");
@@ -625,26 +615,14 @@ void checkFireConditions(unsigned long currentMillis) {
       publishFireAlert();
     }
     
-    // Blink all red LEDs and sound buzzer
+    // Blink red LED and sound buzzer (green stays off)
     if ((currentMillis / 500) % 2 == 0) {  // Toggle every 500ms
-      digitalWrite(LED_RED_PAPER_PIN, HIGH);
-      digitalWrite(LED_RED_PLASTIC_PIN, HIGH);
-      digitalWrite(LED_RED_ALUMINIUM_PIN, HIGH);
-      digitalWrite(LED_RED_GLASS_PIN, HIGH);
-      digitalWrite(LED_GREEN_PAPER_PIN, LOW);
-      digitalWrite(LED_GREEN_PLASTIC_PIN, LOW);
-      digitalWrite(LED_GREEN_ALUMINIUM_PIN, LOW);
-      digitalWrite(LED_GREEN_GLASS_PIN, LOW);
+      digitalWrite(LED_RED_PIN, HIGH);
+      digitalWrite(LED_GREEN_PIN, LOW);
       tone(BUZZER_PIN, BUZZER_FREQ_FIRE_ALERT);
     } else {
-      digitalWrite(LED_RED_PAPER_PIN, LOW);
-      digitalWrite(LED_RED_PLASTIC_PIN, LOW);
-      digitalWrite(LED_RED_ALUMINIUM_PIN, LOW);
-      digitalWrite(LED_RED_GLASS_PIN, LOW);
-      digitalWrite(LED_GREEN_PAPER_PIN, HIGH);
-      digitalWrite(LED_GREEN_PLASTIC_PIN, HIGH);
-      digitalWrite(LED_GREEN_ALUMINIUM_PIN, HIGH);
-      digitalWrite(LED_GREEN_GLASS_PIN, HIGH);
+      digitalWrite(LED_RED_PIN, LOW);
+      digitalWrite(LED_GREEN_PIN, LOW);
       noTone(BUZZER_PIN);
     }
   } else {
@@ -652,6 +630,7 @@ void checkFireConditions(unsigned long currentMillis) {
       fireAlertActive = false;
       noTone(BUZZER_PIN);
       Serial.println("Fire alert cleared");
+      publishSensorData();  // Push cleared state
     }
   }
 }
@@ -662,24 +641,9 @@ void updateLedIndicators() {
     return;  // LEDs controlled by fire alert or cooldown
   }
   
-  // Red ON + Green OFF if >= 50% (bin full)
-  // Red OFF + Green ON if < 50% (bin available)
-  
-  // Paper bin
-  digitalWrite(LED_RED_PAPER_PIN, fillLevels[0] >= 50 ? HIGH : LOW);
-  digitalWrite(LED_GREEN_PAPER_PIN, fillLevels[0] < 50 ? HIGH : LOW);
-  
-  // Plastic bin
-  digitalWrite(LED_RED_PLASTIC_PIN, fillLevels[1] >= 50 ? HIGH : LOW);
-  digitalWrite(LED_GREEN_PLASTIC_PIN, fillLevels[1] < 50 ? HIGH : LOW);
-  
-  // Aluminium bin
-  digitalWrite(LED_RED_ALUMINIUM_PIN, fillLevels[2] >= 50 ? HIGH : LOW);
-  digitalWrite(LED_GREEN_ALUMINIUM_PIN, fillLevels[2] < 50 ? HIGH : LOW);
-  
-  // Glass bin
-  digitalWrite(LED_RED_GLASS_PIN, fillLevels[3] >= 50 ? HIGH : LOW);
-  digitalWrite(LED_GREEN_GLASS_PIN, fillLevels[3] < 50 ? HIGH : LOW);
+  bool anyBinFull = fillLevels[0] >= 50 || fillLevels[1] >= 50 || fillLevels[2] >= 50;
+  digitalWrite(LED_RED_PIN, anyBinFull ? HIGH : LOW);
+  digitalWrite(LED_GREEN_PIN, anyBinFull ? LOW : HIGH);
 }
 
 // ==================== PUBLISH SENSOR DATA ====================
@@ -692,12 +656,13 @@ void publishSensorData() {
   doc["temperature"] = currentTemp;
   doc["humidity"] = currentHumidity;
   doc["smokeLevel"] = smokeLevel;
+  doc["fireAlert"] = fireAlertActive;
+  doc["inFireCooldown"] = inFireCooldown;
   
   JsonArray fills = doc.createNestedArray("fillLevels");
   fills.add(fillLevels[0]);
   fills.add(fillLevels[1]);
   fills.add(fillLevels[2]);
-  fills.add(fillLevels[3]);
   
   char buffer[512];
   serializeJson(doc, buffer);
@@ -753,26 +718,14 @@ void playStartupTone() {
 // ==================== LED HELPERS ====================
 void blinkAllLeds(int times) {
   for (int i = 0; i < times; i++) {
-    // Red LEDs on, Green LEDs off
-    digitalWrite(LED_RED_PAPER_PIN, HIGH);
-    digitalWrite(LED_RED_PLASTIC_PIN, HIGH);
-    digitalWrite(LED_RED_ALUMINIUM_PIN, HIGH);
-    digitalWrite(LED_RED_GLASS_PIN, HIGH);
-    digitalWrite(LED_GREEN_PAPER_PIN, LOW);
-    digitalWrite(LED_GREEN_PLASTIC_PIN, LOW);
-    digitalWrite(LED_GREEN_ALUMINIUM_PIN, LOW);
-    digitalWrite(LED_GREEN_GLASS_PIN, LOW);
+    // Red LED on, Green LED off
+    digitalWrite(LED_RED_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, LOW);
     delay(200);
     
-    // Red LEDs off, Green LEDs on
-    digitalWrite(LED_RED_PAPER_PIN, LOW);
-    digitalWrite(LED_RED_PLASTIC_PIN, LOW);
-    digitalWrite(LED_RED_ALUMINIUM_PIN, LOW);
-    digitalWrite(LED_RED_GLASS_PIN, LOW);
-    digitalWrite(LED_GREEN_PAPER_PIN, HIGH);
-    digitalWrite(LED_GREEN_PLASTIC_PIN, HIGH);
-    digitalWrite(LED_GREEN_ALUMINIUM_PIN, HIGH);
-    digitalWrite(LED_GREEN_GLASS_PIN, HIGH);
+    // Red LED off, Green LED on
+    digitalWrite(LED_RED_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, HIGH);
     delay(200);
   }
 }
