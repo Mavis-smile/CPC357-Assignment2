@@ -6,8 +6,27 @@
 import mqtt from 'mqtt';
 
 // MQTT Configuration
-const MQTT_BROKER_URL = import.meta.env.VITE_MQTT_BROKER_URL || 'ws://localhost:9001';
+const RAW_MQTT_URL = import.meta.env.VITE_MQTT_BROKER_URL || 'ws://localhost:9001';
+const SECURE_MQTT_URL = import.meta.env.VITE_MQTT_BROKER_URL_SECURE;
 const MQTT_TOPIC_ITEM_DETECTED = 'smartbin/item';
+
+// Choose a broker URL that works in HTTPS contexts. If the page is HTTPS, we must use WSS.
+const MQTT_BROKER_URL = (() => {
+  const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+  // If a secure URL is provided explicitly, prefer it when on HTTPS.
+  if (isHttpsPage && SECURE_MQTT_URL) return SECURE_MQTT_URL;
+
+  // If raw URL is already wss or we're on http, just return raw.
+  if (!isHttpsPage || RAW_MQTT_URL.startsWith('wss://')) return RAW_MQTT_URL;
+
+  // Attempt to upgrade ws://host:port to wss://host:port when on HTTPS.
+  if (RAW_MQTT_URL.startsWith('ws://')) {
+    return RAW_MQTT_URL.replace('ws://', 'wss://');
+  }
+
+  return RAW_MQTT_URL;
+})();
 
 // MQTT Client
 let client: mqtt.MqttClient | null = null;
@@ -20,6 +39,14 @@ export const initializeMQTT = () => {
   if (client) {
     console.log('MQTT client already initialized');
     return client;
+  }
+
+  const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const usingSecure = MQTT_BROKER_URL.startsWith('wss://');
+
+  if (isHttpsPage && !usingSecure) {
+    console.error('Page is HTTPS but MQTT URL is not WSS. Set VITE_MQTT_BROKER_URL_SECURE to a wss:// endpoint or terminate TLS at the broker.');
+    return null;
   }
 
   console.log('Connecting to MQTT broker:', MQTT_BROKER_URL);

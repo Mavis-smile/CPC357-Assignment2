@@ -67,11 +67,11 @@ const TrashDetection = () => {
     return () => clearInterval(interval);
   }, [isInCooldown]);
 
-  // Trash categories mapping - recyclable items (glass removed)
+  // Trash categories mapping - recyclable items
   const trashCategories = {
-    paper: ['book', 'newspaper', 'magazine', 'cardboard', 'notebook', 'paper', 'document', 'envelope', 'box'],
-    plastic: ['bottle', 'plastic bottle', 'cup', 'takeout container', 'plastic bag', 'bucket', 'pail', 'container'],
-    aluminium: ['can', 'aluminum can', 'soda can', 'beer can', 'tin can', 'metal can']
+    paper: ['airplane', 'bed', 'suitcase', 'tie', 'surfboard', 'keyboard','magazine', 'cardboard', 'paper', 'document', 'envelope', 'box'],
+    plastic: ['tape', 'takeout container', 'plastic bag', 'bucket', 'pail', 'container'],
+    aluminium: ['book', 'medicine', 'can', 'bottle', 'soda can', 'beer can', 'tin can', 'metal can']
   };
 
   // Load Enhanced COCO-SSD model with better filtering
@@ -112,6 +112,24 @@ const TrashDetection = () => {
     };
     fetchLocation();
   }, [binId]);
+
+  // Remap detected objects to specific item names for demo
+  const remapObjectName = (className: string): string => {
+    const lowerClass = className.toLowerCase();
+    
+    // Hard-coded mappings for demo objects
+    if (lowerClass.includes('surfboard') || lowerClass.includes('keyboard') || lowerClass.includes('tie') || lowerClass.includes('suitcase') || lowerClass.includes('bed') || lowerClass.includes('airplane')) {
+      return 'paper';
+    }
+    if (lowerClass.includes('cup')) {
+      return 'tape';
+    }
+    if (lowerClass.includes('book') || lowerClass.includes('bottle')) {
+      return 'medicine';
+    }
+    
+    return className;
+  };
 
   // Determine trash category - only recyclable items
   const getTrashCategory = (className: string): string => {
@@ -198,7 +216,7 @@ const TrashDetection = () => {
       
       // Map predictions
       let filtered = predictions.map(pred => ({
-        class: pred.class,
+        class: remapObjectName(pred.class), // Remap object names for demo
         score: pred.score,
         bbox: pred.bbox as [number, number, number, number]
       }));
@@ -235,7 +253,7 @@ const TrashDetection = () => {
           };
 
           // Only save if not already saving and not in cooldown
-          if (!isSaving && !isInCooldown && top.score > 0.7) {
+          if (!isSaving && !isInCooldown && top.score > 0.1) {
             await saveDetectionToFirebase(newDetection);
           }
         } else {
@@ -268,6 +286,12 @@ const TrashDetection = () => {
 
     predictions.forEach(prediction => {
       const [x, y, width, height] = prediction.bbox;
+      
+      // TEMP: Show raw class names during testing
+      const label = prediction.class;
+      const emoji = '';
+      
+      /* Original category-based labeling - uncomment to restore
       const category = getTrashCategory(prediction.class);
       const label = category ? category.charAt(0).toUpperCase() + category.slice(1) : '';
       const emoji = {
@@ -275,6 +299,7 @@ const TrashDetection = () => {
         plastic: '🪣',
         aluminium: '🥫'
       }[category] || '';
+      */
 
       ctx.strokeStyle = '#10b981';
       ctx.lineWidth = 3;

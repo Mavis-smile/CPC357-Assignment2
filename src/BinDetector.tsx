@@ -29,6 +29,7 @@ const BinDetector = () => {
   const [modelError, setModelError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<string>('');
   const [binLocation, setBinLocation] = useState<BinLocationData | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   // Enhanced detection - filter out person/hand detections when other objects present
   const ignoredClasses = ['person'];
@@ -65,19 +66,27 @@ const BinDetector = () => {
     loadModel();
   }, []);
 
+  // Request location with timeout and clearer status messaging
+  const requestLocation = async () => {
+    setLocationError(null);
+    setLocationStatus('Locating...');
+
+    const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 12000));
+    const loc = await Promise.race([captureAndStoreLocation(binId), timeoutPromise]);
+
+    if (loc) {
+      setBinLocation(loc);
+      setLocationStatus(loc.method === 'ip' ? 'Approximate location (IP fallback)' : 'Location saved');
+    } else {
+      setBinLocation(null);
+      setLocationStatus('Location unavailable');
+      setLocationError('Please allow location access in your browser, then tap Retry.');
+    }
+  };
+
   // Capture bin location once on mount
   useEffect(() => {
-    const fetchLocation = async () => {
-      setLocationStatus('Locating...');
-      const loc = await captureAndStoreLocation(binId);
-      if (loc) {
-        setBinLocation(loc);
-        setLocationStatus('Location saved');
-      } else {
-        setLocationStatus('Location unavailable');
-      }
-    };
-    fetchLocation();
+    requestLocation();
   }, [binId]);
 
   // Determine trash category
@@ -263,6 +272,9 @@ const BinDetector = () => {
                 {!binLocation && locationStatus && (
                   <p className="text-[10px] sm:text-[11px] text-amber-600 mt-0.5">{locationStatus}</p>
                 )}
+                {locationError && (
+                  <p className="text-[10px] sm:text-[11px] text-red-600 mt-0.5">{locationError}</p>
+                )}
               </div>
             </div>
             
@@ -293,7 +305,13 @@ const BinDetector = () => {
                   </div>
                 )}
               </div>
-              {/* Status hint removed per request */}
+              <button
+                type="button"
+                onClick={requestLocation}
+                className="text-xs font-semibold text-eco-700 bg-eco-100 hover:bg-eco-200 border border-eco-300 px-3 py-1.5 rounded-full"
+              >
+                Retry location
+              </button>
             </div>
           </div>
         </header>
