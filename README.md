@@ -20,17 +20,17 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 | **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
 | **DHT11** | 1 | Temperature & humidity |
 | **SG90 Servo** | 2 | Container rotation + lid control |
-| **Red LED** | 1 | Bin full indicator |
+| **Red LED** | 1 | Bin full indicator or fire alert |
 | **Green LED** | 1 | Bin available indicator |
 | **Push Button** | 1 | Manual fire alarm reset |
 | **Buzzer** | 1 | Fire alert sound (built-in inside mcu) |
 | **USB-C Cable** | 1 | Arduino programming |
-| **5V Power Supply** | 1 | For servos |
+| **Smart Phone** | 1 | For camera object detection and GPS tracking |
 
 ### Step 1: Clone the Repository
 ```bash
 git clone -b hardware https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357_hardware
+cd Project-CPC357
 ```
 
 If you already have the repository:
