@@ -427,27 +427,49 @@ publishItemDetection({
 
 ```cpp
 // Hardware (project.ino - callback)
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  if (strcmp(topic, MQTT_TOPIC_ITEM_DETECTED) == 0) {
-    StaticJsonDocument<256> doc;
-    deserializeJson(doc, payload);
-    
-    String category = doc["category"];  // "plastic"
-    
-    if (category == "plastic") {
-      rotateServo.write(90);   // Move to plastic bin
-      lidServo.write(90);      // Open lid
-      delay(2000);
-      lidServo.write(0);       // Close lid
-    }
+void handleItemDetection(String message) {
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, message);
+  
+  String category = doc["category"];
+  
+  if (category == "plastic") {
+    rotateServo.write(SERVO_ROTATE_LEFT_90);  // 0° - left 90°
+    Serial.println("Servo → Plastic bin (left hole)");
+    delay(1000);
+  } 
+  else if (category == "aluminium") {
+    // Middle hole - no rotation needed, already at neutral (90°)
+    Serial.println("Servo → Aluminium bin (middle hole) - No rotation");
+  } 
+  else if (category == "paper") {
+    rotateServo.write(SERVO_ROTATE_RIGHT_90);  // 180° - right 90°
+    Serial.println("Servo → Paper bin (right hole)");
+    delay(1000);
+  } 
+  else {
+    // Non-recyclable item
+    playNonRecyclableBuzzer();
+    return;  // Don't open lid
   }
+  
+  // Open bottom lid
+  lidServo.write(SERVO_LID_OPEN);   // 180°
+  delay(2000);
+  
+  // Close lid
+  lidServo.write(SERVO_LID_CLOSED); // 0°
+  delay(500);
+  
+  // Return to neutral
+  rotateServo.write(SERVO_ROTATE_NEUTRAL);  // 90°
 }
 ```
 
 #### Flow 2: Hardware → Cloud (Sensor Data)
 
 **What Happens:**
-1. ESP32 reads all sensors every 10 seconds
+1. ESP32 reads all sensors every 5 seconds
 2. Publishes JSON to `smartbin/sensors` topic
 3. MQTT bridge receives and writes to Firebase
 4. Data stored in Firestore for monitoring ✅
@@ -456,11 +478,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 ```json
 {
   "binId": "BIN001",
-  "fillLevels": [30, 75, 20, 60],
+  "fillLevels": [30, 75, 20],
   "temperature": 28.5,
   "humidity": 65.0,
   "smokeLevel": 150,
   "isActive": true,
+  "fireAlert": false,
+  "inFireCooldown": false,
   "timestamp": 1640000000000
 }
 ```
@@ -471,11 +495,13 @@ Collection: bins
 Document: BIN001
 {
   binId: "BIN001"
-  fillLevels: [30, 75, 20, 60]
+  fillLevels: [30, 75, 20]
   temperature: 28.5
   humidity: 65.0
   smokeLevel: 150
   isActive: true
+  fireAlert: false
+  inFireCooldown: false
   updatedAt: Dec 20, 2024 10:30 AM
 }
 ```
@@ -510,22 +536,20 @@ Document: BIN001
 
 **Hardware Response:**
 ```cpp
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  if (strcmp(topic, MQTT_TOPIC_COMMANDS) == 0) {
-    StaticJsonDocument<256> doc;
-    deserializeJson(doc, payload);
+void handleCommand(String message) {
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, message);
+  
+  String action = doc["action"];
+  
+  if (action == "reset-alarm") {
+    fireAlertActive = false;
+    inFireCooldown = true;
+    fireCooldownStart = millis();
+    noTone(BUZZER_PIN);
+    digitalWrite(LED_RED_PIN, LOW);
     
-    String action = doc["action"];
-    
-    if (action == "reset-alarm") {
-      fireAlertActive = false;
-      inFireCooldown = true;
-      fireCooldownStart = millis();
-      noTone(BUZZER_PIN);
-      digitalWrite(RELAY_PIN, LOW);
-      
-      Serial.println("✅ Fire alarm reset - 10-min cooldown");
-    }
+    Serial.println("✅ Fire alarm reset - 10-min cooldown");
   }
 }
 ```
@@ -552,7 +576,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 |--------|--------|-------------|---|
 | **Reset Alarm** | `reset-alarm` | Stops buzzer, starts 10-min cooldown | `{"action":"reset-alarm"}` |
 | **Mark Emptied** | `mark-emptied` | Resets all fill level sensors to 0% | `{"action":"mark-emptied"}` |
-| **Test Servo** | `test-servo` | Rotates both servos through full range | `{"action":"test-servo"}` |
+| **Test Paper Slot** | `test-servo-paper` | Tests right hole rotation (180°) + lid open/close | `{"action":"test-servo-paper"}` |
+| **Test Plastic Slot** | `test-servo-plastic` | Tests left hole rotation (0°) + lid open/close | `{"action":"test-servo-plastic"}` |
+| **Test Aluminium Slot** | `test-servo-aluminium` | Tests middle hole (neutral 90°) + lid open/close | `{"action":"test-servo-aluminium"}` |
 | **Maintenance** | `maintenance-mode` | Disables sensor alerts and detections | `{"action":"maintenance-mode"}` |
 
 #### Complete Control Flow
@@ -564,7 +590,7 @@ Command written to Firebase
 Collection: commands
 Document: {
   binId: "BIN001",
-  action: "test-servo",
+  action: "test-servo-paper",
   status: "pending",
   issuedAt: timestamp
 }
@@ -574,16 +600,21 @@ Bridge.js onSnapshot listener
 Bridge publishes to MQTT topic: smartbin/commands
 Payload: {
   "binId": "BIN001",
-  "action": "test-servo",
+  "action": "test-servo-paper",
   "timestamp": 1640000000000
 }
     ↓
 ESP32 mqttCallback receives message
     ↓ Parses JSON
-if (action == "test-servo") {
-  // Move rotation servo: 0° → 90° → 180° → 0°
-  // Move lid servo: 0° → 90° → 0°
-  Serial.println("Servo test complete");
+if (action == "test-servo-paper") {
+  rotateServo.write(SERVO_ROTATE_RIGHT_90);  // 180°
+  delay(1000);
+  lidServo.write(SERVO_LID_OPEN);            // 180°
+  delay(1000);
+  lidServo.write(SERVO_LID_CLOSED);          // 0°
+  delay(500);
+  rotateServo.write(SERVO_ROTATE_NEUTRAL);   // 90°
+  Serial.println("Paper test done");
 }
     ↓
 Hardware executes
@@ -594,25 +625,56 @@ Serial Monitor shows confirmation
 
 #### Hardware Integration (project.ino):
 ```cpp
-// Lines ~350
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  if (strcmp(topic, MQTT_TOPIC_COMMANDS) == 0) {
-    StaticJsonDocument<256> doc;
-    deserializeJson(doc, payload);
-    
-    String action = doc["action"];
-    
-    if (action == "reset-alarm") {
-      handleResetAlarm();
-    }
-    else if (action == "mark-emptied") {
-      handleMarkEmptied();
-    }
-    else if (action == "test-servo") {
-      handleTestServo();
-    }
-    else if (action == "maintenance-mode") {
-      handleMaintenanceMode();
+void handleCommand(String message) {
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, message);
+  
+  String receivedBinId = doc["binId"];
+  String action = doc["action"];
+  
+  if (receivedBinId != binId) return;
+  
+  if (action == "reset-alarm") {
+    fireAlertActive = false;
+    inFireCooldown = true;
+    fireCooldownStart = millis();
+    noTone(BUZZER_PIN);
+    digitalWrite(LED_RED_PIN, LOW);
+  }
+  else if (action == "mark-emptied") {
+    fillLevels[0] = 0;
+    fillLevels[1] = 0;
+    fillLevels[2] = 0;
+    publishSensorData();
+  }
+  else if (action == "test-servo-paper") {
+    rotateServo.write(SERVO_ROTATE_RIGHT_90);
+    delay(1000);
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+    delay(500);
+    rotateServo.write(SERVO_ROTATE_NEUTRAL);
+  }
+  else if (action == "test-servo-plastic") {
+    rotateServo.write(SERVO_ROTATE_LEFT_90);
+    delay(1000);
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+    delay(500);
+    rotateServo.write(SERVO_ROTATE_NEUTRAL);
+  }
+  else if (action == "test-servo-aluminium") {
+    lidServo.write(SERVO_LID_OPEN);
+    delay(1000);
+    lidServo.write(SERVO_LID_CLOSED);
+  }
+  else if (action == "maintenance-mode") {
+    isMaintenanceMode = !isMaintenanceMode;
+    if (isMaintenanceMode) {
+      fireAlertActive = false;
+      noTone(BUZZER_PIN);
     }
   }
 }
@@ -646,11 +708,13 @@ node bridge.js
 ```bash
 mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
   "binId": "BIN001",
-  "fillLevels": [50, 75, 30, 60],
+  "fillLevels": [50, 75, 30],
   "temperature": 28.5,
   "humidity": 65,
   "smokeLevel": 150,
-  "isActive": true
+  "isActive": true,
+  "fireAlert": false,
+  "inFireCooldown": false
 }'
 ```
 
@@ -662,8 +726,8 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 ### Test 3: Hardware to Dashboard
 
 **On ESP32 Serial Monitor:**
-- Should see sensor readings every 10 seconds
-- Example: `[Sensors] T=28.5°C, H=65%, Fill=[50,75,30,60]`
+- Should see sensor readings every 5 seconds
+- Example: `Paper fill: 50%, Plastic fill: 75%, Aluminium fill: 30%`
 
 **On Dashboard:**
 - Select "BIN001" from dropdown
@@ -678,7 +742,7 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 3. Enter:
    ```
    binId: BIN001
-   action: test-servo
+   action: test-servo-paper
    status: pending
    issuedAt: (auto timestamp)
    ```
@@ -686,8 +750,8 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 
 **Check results:**
 1. Bridge logs: Should show "Command published to ESP32"
-2. ESP32 Serial Monitor: Should show servo movement
-3. Physically: Servos should rotate
+2. ESP32 Serial Monitor: Should show "Testing paper slot (right hole - R90° + lid)..."
+3. Physically: Rotation servo moves to 180°, lid opens/closes, returns to neutral
 4. Firebase: Command status changed to "processed"
 
 ### Test 5: Complete Fire Alert System
@@ -707,177 +771,8 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 3. System enters 10-minute cooldown
 4. Serial Monitor: "Fire alarm reset - 10-min cooldown"
 
-### System Status Checklist
-
-- [ ] GCP VM running and accessible
-- [ ] Mosquitto MQTT broker active (ports 1883, 9001)
-- [ ] MQTT-Firebase bridge service running
-- [ ] ESP32 connected to WiFi
-- [ ] ESP32 connected to MQTT
-- [ ] Servo responds to item detection
-- [ ] Fire alert triggers correctly
-- [ ] Remote commands execute properly
-
 ---
 
-## Troubleshooting
-
-### General Debugging
-
-**Check bridge logs in real-time:**
-```bash
-sudo journalctl -u mqtt-bridge -f
-```
-
-**Monitor all MQTT topics:**
-```bash
-mosquitto_sub -h localhost -t "smartbin/#" -v
-```
-
-**Test MQTT connectivity:**
-```bash
-mosquitto_pub -h localhost -t "smartbin/test" -m "hello"
-# If no error, MQTT is working
-```
-
-### Common Issues & Solutions
-
-#### Issue: "serviceAccountKey.json not found"
-
-**Solution:**
-```bash
-# Verify file exists
-ls -la ~/mqtt-firebase-bridge/serviceAccountKey.json
-
-# If missing, upload it
-scp serviceAccountKey.json username@YOUR_VM_IP:~/mqtt-firebase-bridge/
-
-# Check permissions
-sudo chown $USER:$USER ~/mqtt-firebase-bridge/serviceAccountKey.json
-```
-
-#### Issue: "Cannot connect to MQTT broker"
-
-**Solution:**
-```bash
-# Check Mosquitto is running
-sudo systemctl status mosquitto
-
-# Restart if needed
-sudo systemctl restart mosquitto
-
-# Test basic connectivity
-mosquitto_sub -h localhost -t "test"
-```
-
-#### Issue: "Firebase authentication failed"
-
-**Solution:**
-```bash
-# Verify service account key is valid
-cat ~/mqtt-firebase-bridge/serviceAccountKey.json
-# Should contain: "type": "service_account", "project_id", "private_key"
-
-# Check Firebase project ID in config matches
-```
-
-#### Issue: "ESP32 won't connect to WiFi"
-
-**Solution:**
-```cpp
-// In project.ino, check:
-1. WiFi SSID is 2.4GHz (NOT 5GHz)
-2. Password is correct
-3. Ensure quotes around SSID/password strings
-4. Try moving closer to router
-5. Restart ESP32 (press EN button)
-```
-
-**Serial output to verify:**
-```
-WiFi connecting to: YOUR_SSID
-Attempt 1... 
-✓ WiFi connected!
-IP: 192.168.x.x
-```
-
-#### Issue: "Hardware doesn't respond to remote commands"
-
-**Debug flow:**
-```bash
-# Terminal 1: Watch bridge logs
-sudo journalctl -u mqtt-bridge -f
-
-# Terminal 2: Watch MQTT commands topic
-mosquitto_sub -h localhost -t "smartbin/commands" -v
-
-# Terminal 3 (Firebase Console): Add test command
-# If all show activity, problem is on ESP32 side
-# Check: Is ESP32 subscribed to smartbin/commands?
-```
-
-#### Issue: "Servo not moving"
-
-**Check:**
-1. External 5V power supply connected to servo?
-2. Servo signal pins correct (GPIO 39, 5)?
-3. Servo library installed? (ESP32Servo v3.0+)
-4. Test with "Test Servo" command via Firebase
-
-**Verify in code:**
-```cpp
-// Check servo initialization
-rotateServo.attach(SERVO_ROTATE_PIN);  // GPIO 39
-lidServo.attach(SERVO_LID_PIN);        // GPIO 5
-
-// Both should print: "Servo attached"
-```
-
-### Monitoring Commands
-
-**Watch ESP32 Serial Output:**
-```
-Arduino IDE > Tools > Serial Monitor (115200 baud)
-```
-
-**Watch Bridge Service:**
-```bash
-sudo journalctl -u mqtt-bridge -f -n 50
-```
-
-**Check Firebase Activity:**
-- Console > Firestore > click on document
-- Check "Last modified" timestamp
-- Should update when data published
-
-**Check MQTT Message Flow:**
-```bash
-# Subscribe to all smartbin topics with timestamps
-mosquitto_sub -h localhost -t "smartbin/#" -v
-```
-
-### Performance Optimization
-
-**If dashboard slow:**
-```javascript
-// In bridge.js, add batching
-// Only update Firebase every 10 seconds instead of every publish
-```
-
-**If ESP32 running out of memory:**
-```cpp
-// Reduce JSON document size
-// Use StaticJsonDocument<128> instead of <256>
-```
-
-**If MQTT losing messages:**
-```bash
-# In Mosquitto config, add persistence
-# persistence true
-# persistence_location /var/lib/mosquitto/
-```
-
----
 
 ## Architecture Summary
 
@@ -896,9 +791,9 @@ mosquitto_sub -h localhost -t "smartbin/#" -v
 
 ```
 1. SENSOR COLLECTION (ESP32)
-   ↓ Every 10 seconds
+   ↓ Every 5 seconds
 2. PUBLISH TO MQTT (smartbin/sensors)
-   ↓ Over WiFi
+   ↓ Every 10 seconds over WiFi
 3. BRIDGE RECEIVES (bridge.js)
    ↓ Parses JSON
 4. WRITE TO FIREBASE (bins collection)
@@ -911,9 +806,6 @@ mosquitto_sub -h localhost -t "smartbin/#" -v
 ```
 
 ### Security Notes
-
-⚠️ **For Production:**
-
 1. **Service Account Key**: Never commit to git
    ```bash
    echo "serviceAccountKey.json" >> .gitignore
@@ -943,51 +835,3 @@ mosquitto_sub -h localhost -t "smartbin/#" -v
    ```
 
 ---
-
-## Quick Reference
-
-### File Locations
-
-**Your Computer:**
-```
-Project/
-└── Project-CPC357_hardware/
-    ├── bridge.js                (MQTT-Firebase bridge)
-    ├── project/
-    │   └── project.ino          (Hardware firmware)
-    └── README.md
-```
-
-**GCP VM:**
-```
-/home/username/
-└── mqtt-firebase-bridge/
-    ├── bridge.js
-    ├── package.json
-    ├── serviceAccountKey.json
-    └── node_modules/
-```
-
-### Important URLs/IPs
-
-- **Firebase Console**: https://console.firebase.google.com/
-- **GCP Console**: https://console.cloud.google.com/
-- **MQTT Broker**: YOUR_GCP_VM_EXTERNAL_IP:1883
-- **MQTT WebSocket**: ws://YOUR_GCP_VM_EXTERNAL_IP:9001
-
-### Essential Commands
-
-```bash
-# Check bridge service
-sudo systemctl status mqtt-bridge
-
-# Restart bridge
-sudo systemctl restart mqtt-bridge
-
-# View bridge logs
-sudo journalctl -u mqtt-bridge -f
-
-# Test MQTT
-mosquitto_pub -h localhost -t "smartbin/test" -m "hello"
-mosquitto_sub -h localhost -t "smartbin/#" -v
-```
