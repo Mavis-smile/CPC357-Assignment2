@@ -12,7 +12,7 @@ Real-time waste detection system using AI-powered camera vision to identify and 
 ### Step 1: Clone the Repository
 ```bash
 git clone -b camera https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357_cam
+cd Project-CPC357
 ```
 
 If you already have the repository:
