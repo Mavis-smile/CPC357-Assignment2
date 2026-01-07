@@ -3,6 +3,7 @@
 Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for Smart Recycle Bin IoT System deployments with GPS tracking and cloud storage.
 
 Firebase Database (only assigned user email can access database): https://console.firebase.google.com/u/0/project/cpc357-6876b/overview
+
 Deployed Camera URL: https://cpc357-6876b.web.app/
 
 ## 🚀 Setup and Installation
