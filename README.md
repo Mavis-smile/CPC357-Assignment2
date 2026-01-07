@@ -2,27 +2,77 @@
 
 Web dashboard for real-time monitoring, analytics, and remote control of IoT smart bins. Visualizes bin locations, fill levels, recent detections, and allows officers to send remote commands (e.g., close lid, mark emptied).
 
-## 🚀 Quick Start
+## 🚀 Setup and Installation
 
+### Prerequisites
+- Node.js (v16 or higher)
+- npm (comes with Node.js)
+- Git
 
-**Step 1:** Install dependencies
+### Step 1: Clone the Repository
+```bash
+git clone -b dashboard https://github.com/andy-clos/Project-CPC357.git
+cd Project-CPC357_dashboard
+```
+
+If you already have the repository:
+```bash
+git pull origin main
+```
+
+### Step 2: Install Dependencies
 ```bash
 npm install
 ```
 
-**Step 2:** Configure environment variables  
-Create `.env.local` in the project root:
-```env
-VITE_MAPS_API_KEY=your_google_maps_api_key_here
-```
-> **Note:** Google Maps API key is required for map display and address lookup.
+### Step 3: Configure Environment Variables
+Create a `.env.local` file in the project root directory:
+```bash
+# For Windows PowerShell
+New-Item .env.local
 
-**Step 3:** Run the development server
+# For macOS/Linux
+touch .env.local
+```
+
+Add the following environment variables to `.env.local`:
+
+```env
+# Google Maps API Key (Required for map display and address lookup)
+VITE_MAPS_API_KEY=<YOUR_GOOGLE_MAPS_API_KEY>
+
+# Firebase Configuration
+# Get these values from Firebase Console > Project Settings > General > Your apps
+VITE_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
+VITE_FIREBASE_AUTH_DOMAIN=<YOUR_PROJECT_ID>.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=<YOUR_PROJECT_ID>
+VITE_FIREBASE_STORAGE_BUCKET=<YOUR_PROJECT_ID>.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=<YOUR_SENDER_ID>
+VITE_FIREBASE_APP_ID=<YOUR_APP_ID>
+VITE_FIREBASE_MEASUREMENT_ID=<YOUR_MEASUREMENT_ID>
+```
+
+#### Required Keys (refer to project report for actual values):
+- **VITE_MAPS_API_KEY**: Google Maps API key for map display and geocoding
+- **VITE_FIREBASE_API_KEY**: Firebase API key from project settings
+- **VITE_FIREBASE_AUTH_DOMAIN**: Firebase authentication domain
+- **VITE_FIREBASE_PROJECT_ID**: Your Firebase project ID
+- **VITE_FIREBASE_STORAGE_BUCKET**: Firebase storage bucket URL
+- **VITE_FIREBASE_MESSAGING_SENDER_ID**: Firebase messaging sender ID
+- **VITE_FIREBASE_APP_ID**: Firebase app ID
+- **VITE_FIREBASE_MEASUREMENT_ID**: Firebase Analytics measurement ID
+
+> **Important:** All configuration values (Google Maps API key and Firebase credentials) are provided in the project report. Copy them exactly as shown.
+
+### Step 4: Run the Development Server
 ```bash
 npm run dev
 ```
 
-**Step 4:** Open the app in your browser. No camera or location permissions are needed for dashboard use.
+The application will start at `http://localhost:5173` (or another available port).
+
+### Step 5: Access the Dashboard
+Open the app in your browser. No camera or location permissions are needed for dashboard use.
 
 ---
 
