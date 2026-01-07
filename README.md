@@ -81,7 +81,7 @@ Open the app in your browser. No camera or location permissions are needed for d
 | Category | Technology |
 |----------|-----------|
 
-| **Framework** | React 18 + TypeScript + Vite |
+| **Framework** | React 18, TypeScript, Vite |
 | **Styling** | Tailwind CSS v3 |
 | **Database** | Firebase Firestore |
 | **Map** | Google Maps API |
@@ -145,58 +145,6 @@ Project-CPC357_dashboard/
 ├── tailwind.config.js
 └── README.md
 ```
-
----
-
-## ⚙️ Configuration & Customization
-
-
-### Change Default Bin Selection
-Edit the dashboard code to set a default bin if desired (see `src/App.tsx`).
-
----
-
-## 🔐 Security Recommendations
-
-
-Currently, Firestore writes are unauthenticated for IoT/camera deployment. For production:
-
-```javascript
-// Firestore Security Rules (example)
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /detections/{document} {
-      allow write: if true;              // Kiosk write access
-      allow read: if request.auth != null;  // Authenticated read
-    }
-    match /bins/{binId} {
-      allow write: if true;
-      allow read: if request.auth != null;
-    }
-  }
-}
-```
-
----
-
-## 🚢 Deployment
-
-Build for production:
-```bash
-npm run build
-```
-
-Output will be in `dist/` folder. Deploy to:
-- **Vercel** / **Netlify** (recommended for static hosting)
-- **Firebase Hosting**
-- Any CDN or static web server
-
-
-**Requirements:**
-- HTTPS is required for secure access
-- Configure Firebase project credentials in `src/firebase.ts`
-
 ---
 
 ## 🛠️ Development Commands
@@ -205,8 +153,5 @@ Output will be in `dist/` folder. Deploy to:
 |---------|-------------|
 | `npm install` | Install dependencies |
 | `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build |
-| `npm run lint` | Run ESLint |
 
 ---
