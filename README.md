@@ -12,7 +12,7 @@ Web dashboard for real-time monitoring, analytics, and remote control of IoT sma
 ### Step 1: Clone the Repository
 ```bash
 git clone -b dashboard https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357_dashboard
+cd Project-CPC357
 ```
 
 If you already have the repository:
@@ -80,7 +80,7 @@ Open the app in your browser. No camera or location permissions are needed for d
 
 | Category | Technology |
 |----------|-----------|
-| **Framework** | React 18, TypeScript, Vite |
+| **Framework** | React 18 + TypeScript + Vite |
 | **Styling** | Tailwind CSS v3 |
 | **Database** | Firebase Firestore |
 | **Map** | Google Maps API |
