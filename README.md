@@ -26,7 +26,7 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      SMARTPHONE (Camera Device)                      │
+│                      SMARTPHONE (Camera Device)                     │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │  Camera Web UI (React App - Project-CPC357_cam)                │ │
 │  │  - Object Detection Model (TensorFlow.js/YOLO)                 │ │
@@ -66,14 +66,14 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
                                         └──────┬───────────────┘
                                                │ WiFi/Internet
                                                ▼
-                                    ┌────────────────────────┐
-                                    │  Dashboard Web UI      │
-                                    │  (React - Vite)        │
+                                    ┌───────────────────────────┐
+                                    │  Dashboard Web UI         │
+                                    │  (React - Vite)           │
                                     │  Project-CPC357_dashboard │
-                                    │  - Real-time monitor   │
-                                    │  - Remote control      │
-                                    │  - Alerts & analytics  │
-                                    └────────────────────────┘
+                                    │  - Real-time monitor      │
+                                    │  - Remote control         │
+                                    │  - Alerts & analytics     │
+                                    └───────────────────────────┘
 ```
 
 ---
@@ -101,9 +101,9 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 | **Red LED** | 1 | Bin full indicator |
 | **Green LED** | 1 | Bin available indicator |
 | **Push Button** | 1 | Manual fire alarm reset |
-| **Buzzer** | 1 | Fire alert sound (built-in) |
+| **Buzzer** | 1 | Fire alert sound (built-in inside mcu) |
 | **USB-C Cable** | 1 | Arduino programming |
-| **5V Power Supply** | 1 | For servos |
+
 
 ### Network Requirements
 
@@ -118,32 +118,11 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 
 ### Phase 1: Cloud Infrastructure
 
-#### Step 1️⃣: Firebase Setup
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click **Add project** → Enter name: `Smart-Recycle-Bin`
-3. Disable Google Analytics → **Create project**
-4. **Create Firestore Database:**
-   - Click **Create database**
-   - Start in **production mode**
-   - Choose nearest region → **Enable**
-5. **Get Firebase Config:**
-   - Project Settings > General > Your apps
-   - Click Web app icon `</>`
-   - Register app: `smart-bin-camera`
-   - Copy the entire `firebaseConfig` object
-   - Save it for later (needed in `.env.local` files)
-6. **Create Service Account Key:**
-   - Project Settings > Service accounts
-   - Click **Generate new private key**
-   - Download as JSON
-   - Rename to `serviceAccountKey.json`
-
-#### Step 2️⃣: GCP VM Setup
+#### Step 1: GCP VM Setup
 
 **Create VM Instance:**
 ```bash
-# Via Google Cloud Console:
+# Using Google Cloud Console:
 1. Compute Engine > VM instances > CREATE INSTANCE
 2. Name: smart-bin-mqtt
 3. Region: (use default region)
@@ -154,7 +133,7 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 
 **Configure Firewall Rules:**
 ```bash
-# Via Google Cloud Console:
+# Using Google Cloud Console:
 1. Go to VPC Network > Firewall
 2. Click CREATE FIREWALL RULE
 
@@ -223,7 +202,7 @@ mosquitto_pub -h localhost -t "test" -m "Hello MQTT"
 # Terminal 1 should display: test Hello MQTT
 ```
 
-#### Step 3️⃣: Install Node.js
+#### Step 2: Install Node.js
 
 ```bash
 # Add Node.js 20 repository
@@ -237,7 +216,7 @@ node --version  # v20.x.x
 npm --version   # 10.x.x or higher
 ```
 
-#### Step 4️⃣: Create MQTT-Firebase Bridge (15 min)
+#### Step 3: Create MQTT-Firebase Bridge
 
 **Create project directory:**
 ```bash
@@ -261,7 +240,7 @@ npm install mqtt firebase-admin
 5. Click the "Upload file" button at the top and upload the bridge.js file.
 6. Click the "Upload file" button again and upload the serviceAccountKey.json file.
 7. Move both files to the mqtt-firebase-bridge directory:
-   cd ~
+   cd ../
    mv bridge.js mqtt-firebase-bridge/
    mv serviceAccountKey.json mqtt-firebase-bridge/
    cd mqtt-firebase-bridge
@@ -298,7 +277,7 @@ node bridge.js
 sudo nano /etc/systemd/system/mqtt-bridge.service
 ```
 
-Paste this content:
+Paste this content (change username):
 ```ini
 [Unit]
 Description=MQTT to Firebase Bridge
@@ -344,7 +323,7 @@ Jan 08 10:30:25 smart-bin-mqtt node[1234]: 📊 Sensor data received from BIN001
 
 ### Phase 2: Hardware Setup
 
-#### Step 5️⃣: Arduino IDE & ESP32 Board
+#### Step 1: Arduino IDE & ESP32 Board
 
 **Install Arduino IDE:**
 - Download: [arduino.cc/software](https://www.arduino.cc/en/software)
@@ -369,11 +348,11 @@ Tools > Manage Libraries > Search and install:
 - `ESP32Servo` (v3.0+) - Servo control
 - `ArduinoJson` (v6.21+) - JSON parsing
 
-#### Step 6️⃣: Configure & Upload project.ino
+#### Step 2: Configure & Upload project.ino
 
-**Open firmware in Arduino IDE**
+**Open .ino in Arduino IDE**
 
-Open the firmware file at:
+Open the .ino file at:
 
 Project-CPC357_hardware/project/project.ino
 
@@ -389,7 +368,7 @@ String binId = "BIN001";  // Unique identifier for this bin
 **Connect ESP32 via USB cable**
 
 **Configure Upload Settings:**
-1. Tools > Board > ESP32S3 Dev Module
+1. Tools > Board > Cytron Maker Feather AIoT S3
 2. Tools > Port > (select your COM port)
 3. Tools > Upload Speed > 921600
 
@@ -400,7 +379,7 @@ String binId = "BIN001";  // Unique identifier for this bin
 
 **Verify in Serial Monitor:**
 1. Tools > Serial Monitor
-2. Set baud rate: 115200
+2. Set baud rate: 9600
 3. Should see output like:
 ```
 === System Initializing ===
@@ -423,8 +402,8 @@ MQTT connecting to: 192.168.x.x
 #### Flow 1: Camera → Hardware (Item Detection)
 
 **What Happens:**
-1. User holds item near camera
-2. TensorFlow.js model detects: "plastic bottle - 95% confidence"
+1. User throw the item into the trash container with camera at above
+2. TensorFlow.js model detects: "plastic - xx% confidenc"
 3. Camera captures GPS coordinates from phone
 4. MQTT publishes to `smartbin/item` topic
 5. ESP32 receives message via Mosquitto
