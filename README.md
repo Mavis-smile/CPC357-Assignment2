@@ -140,13 +140,14 @@ npm install mqtt firebase-admin
 4. Upload files to VM:
 ```bash
 # From your local machine
-Go to the CPC357 Firebase project and click Project Settings.
-Click into Service Accounts and click "Generate new private key".
-Rename the file to "serviceAccountKey.json".
-Back to the GCP VM SSH.
-Click the "Upload File" button at the top and upload the serviceAccountKey.json file.
-cd ../
-mv serviceAccountKey.json /mqtt-firebase-bridge
+1. Go to the CPC357 Firebase project and click Project Settings.
+2. Click into Service Accounts and click "Generate new private key".
+3. Rename the file to "serviceAccountKey.json".
+4. Back to the GCP VM SSH.
+5. Click the "Upload File" button at the top and upload the serviceAccountKey.json file.
+6. cd ../
+7. mv serviceAccountKey.json /mqtt-firebase-bridge
+8. cd mqtt-firebase-bridge
 ```
 
 5. Run the bridge:
@@ -594,76 +595,6 @@ MQTT connecting to: 192.168.x.x
 
 ---
 
-### Phase 3: Web Applications
-
-#### Step 7️⃣: Camera App Setup
-
-```bash
-cd Project-CPC357_cam
-
-# Install dependencies
-npm install
-
-# Create environment file
-cp .env.example .env.local
-```
-
-**Edit `.env.local` with your Firebase config:**
-```env
-VITE_MQTT_BROKER_URL=ws://YOUR_GCP_VM_EXTERNAL_IP:9001
-
-# Firebase configuration from step 1
-VITE_FIREBASE_API_KEY=AIzaSy...
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-VITE_FIREBASE_APP_ID=1:123456789:web:abcdef...
-VITE_FIREBASE_MEASUREMENT_ID=G-XXXXXXXXXX
-```
-
-Note: The camera app uses `BIN001` as the standardized bin identifier to match the hardware firmware and bridge.
-
-**Run locally:**
-```bash
-npm run dev
-# Access from phone: http://YOUR_COMPUTER_IP:5173
-```
-
-**Or deploy to Firebase Hosting:**
-```bash
-npm install -g firebase-tools
-firebase login
-npm run build
-firebase deploy
-# Access from: https://your-project.web.app
-```
-
-#### Step 8️⃣: Dashboard Setup
-
-```bash
-cd Project-CPC357_dashboard
-
-# Install dependencies
-npm install
-
-# Verify .env.local exists with Firebase config
-# (Same Firebase config as camera app)
-```
-
-**Add Google Maps API key to `.env.local`:**
-```env
-VITE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
-```
-
-**Run locally:**
-```bash
-npm run dev
-# Open browser: http://localhost:5173
-```
-
----
-
 ## Communication Architecture
 
 ### Detailed Communication Flows
@@ -713,14 +644,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 ```
 
-#### Flow 2: Hardware → Dashboard (Sensor Data)
+#### Flow 2: Hardware → Cloud (Sensor Data)
 
 **What Happens:**
 1. ESP32 reads all sensors every 10 seconds
 2. Publishes JSON to `smartbin/sensors` topic
 3. MQTT bridge receives and writes to Firebase
-4. Dashboard listens to Firebase Firestore
-5. UI updates in real-time with new values ✅
+4. Data stored in Firestore for monitoring ✅
 
 **MQTT Message:**
 ```json
@@ -750,15 +680,14 @@ Document: BIN001
 }
 ```
 
-#### Flow 3: Dashboard → Hardware (Remote Commands)
+#### Flow 3: Cloud → Hardware (Remote Commands)
 
 **What Happens:**
-1. User clicks "Reset Alarm" button
-2. Dashboard writes to Firebase `commands` collection
-3. Bridge script detects new command
-4. Bridge publishes to `smartbin/commands` via MQTT
-5. ESP32 receives and executes command
-6. Buzzer stops, fire cooldown starts ✅
+1. Remote command written to Firebase `commands` collection
+2. Bridge script detects new command
+3. Bridge publishes to `smartbin/commands` via MQTT
+4. ESP32 receives and executes command
+5. Action completed ✅
 
 **Command Document in Firebase:**
 ```json
@@ -829,10 +758,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 #### Complete Control Flow
 
 ```
-User Action: Click "Test Servo"
+Remote Command Initiated
     ↓
-Dashboard.sendCommand('test-servo')
-    ↓ Writes to Firebase
+Command written to Firebase
 Collection: commands
 Document: {
   binId: "BIN001",
@@ -860,59 +788,11 @@ if (action == "test-servo") {
     ↓
 Hardware executes
     ↓ Servos rotate visibly
-User sees result + Serial Monitor confirmation
+Serial Monitor shows confirmation
 ✅ System working!
 ```
 
-#### Integration Points
-
-**Dashboard (App.tsx):**
-```typescript
-// Lines 220-240
-const sendCommand = async (action: string) => {
-  if (!selectedBin) return
-  setIsSendingCmd(true)
-  
-  try {
-    await addDoc(collection(db, 'commands'), {
-      binId: selectedBin,
-      action: action,
-      issuedAt: serverTimestamp(),
-      status: 'pending'
-    })
-    
-    setActionMessage(`${action} command sent to ${selectedBin}`)
-  } catch (err) {
-    setActionMessage('Failed to send command')
-  } finally {
-    setIsSendingCmd(false)
-  }
-}
-```
-
-**Bridge Script (bridge.js):**
-```javascript
-// Listens to Firebase commands collection
-db.collection('commands')
-  .where('status', '==', 'pending')
-  .onSnapshot(snapshot => {
-    snapshot.docChanges().forEach(async change => {
-      if (change.type === 'added') {
-        const { binId, action } = change.doc.data()
-        
-        // Publish to MQTT
-        mqttClient.publish('smartbin/commands', JSON.stringify({
-          binId, action, timestamp: Date.now()
-        }))
-        
-        // Mark processed
-        await change.doc.ref.update({ status: 'processed' })
-      }
-    })
-  })
-```
-
-**Hardware (project.ino):**
+#### Hardware Integration (project.ino):
 ```cpp
 // Lines ~350
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -1018,21 +898,14 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 
 **Hardware response (should see):**
 - Buzzer beeping
-- All LEDs blinking
-- Relay clicking on
+- LEDs blinking
 - Serial Monitor: "🔥 FIRE DETECTED!"
 
-**Dashboard response:**
-- Red pulsing banner: "FIRE ALERT DETECTED!"
-- Shows temperature and smoke level
-- "Reset Alarm" button available
-
 **Reset alarm:**
-1. Click "Reset Alarm" button OR press push button
+1. Press push button on hardware OR send reset command via Firebase
 2. Hardware stops buzzer, LEDs off
 3. System enters 10-minute cooldown
-4. Dashboard banner disappears
-5. Serial Monitor: "Fire alarm reset - 10-min cooldown"
+4. Serial Monitor: "Fire alarm reset - 10-min cooldown"
 
 ### System Status Checklist
 
@@ -1041,8 +914,6 @@ mosquitto_pub -h localhost -t "smartbin/sensors" -m '{
 - [ ] MQTT-Firebase bridge service running
 - [ ] ESP32 connected to WiFi
 - [ ] ESP32 connected to MQTT
-- [ ] Camera app shows "Hardware Connected" (green)
-- [ ] Dashboard displays bin data
 - [ ] Servo responds to item detection
 - [ ] Fire alert triggers correctly
 - [ ] Remote commands execute properly
@@ -1110,16 +981,6 @@ cat ~/mqtt-firebase-bridge/serviceAccountKey.json
 # Check Firebase project ID in config matches
 ```
 
-#### Issue: "Dashboard not showing data"
-
-**Debug steps:**
-1. Check Firebase Firestore rules allow read access
-   - Go to Firestore > Rules
-   - Should allow `allow read, write: if true;` for testing
-2. Check browser console for errors (F12)
-3. Verify bins collection exists in Firestore
-4. Check bridge is updating Firebase (look at timestamps)
-
 #### Issue: "ESP32 won't connect to WiFi"
 
 **Solution:**
@@ -1159,15 +1020,15 @@ mosquitto_sub -h localhost -t "smartbin/commands" -v
 
 **Check:**
 1. External 5V power supply connected to servo?
-2. Servo signal pins correct (GPIO 13, 14)?
+2. Servo signal pins correct (GPIO 39, 5)?
 3. Servo library installed? (ESP32Servo v3.0+)
-4. Test with "Test Servo" command from dashboard
+4. Test with "Test Servo" command via Firebase
 
 **Verify in code:**
 ```cpp
 // Check servo initialization
-rotateServo.attach(ROTATION_SERVO_PIN);  // GPIO 13
-lidServo.attach(LID_SERVO_PIN);          // GPIO 14
+rotateServo.attach(SERVO_ROTATE_PIN);  // GPIO 39
+lidServo.attach(SERVO_LID_PIN);        // GPIO 5
 
 // Both should print: "Servo attached"
 ```
@@ -1290,13 +1151,11 @@ mosquitto_sub -h localhost -t "smartbin/#" -v
 **Your Computer:**
 ```
 Project/
-├── Project-CPC357_cam/          (Camera app)
-│   └── src/
-│       ├── mqttClient.ts        (MQTT WebSocket)
-│       └── TrashDetection.tsx   (Detection logic)
-├── Project-CPC357_dashboard/    (Dashboard app)
-│   └── src/App.tsx              (Remote control)
-└── project.ino                  (Hardware firmware)
+└── Project-CPC357_hardware/
+    ├── bridge.js                (MQTT-Firebase bridge)
+    ├── project/
+    │   └── project.ino          (Hardware firmware)
+    └── README.md
 ```
 
 **GCP VM:**
@@ -1313,8 +1172,6 @@ Project/
 
 - **Firebase Console**: https://console.firebase.google.com/
 - **GCP Console**: https://console.cloud.google.com/
-- **Camera App**: http://YOUR_COMPUTER_IP:5173
-- **Dashboard**: http://localhost:5173
 - **MQTT Broker**: YOUR_GCP_VM_EXTERNAL_IP:1883
 - **MQTT WebSocket**: ws://YOUR_GCP_VM_EXTERNAL_IP:9001
 
@@ -1333,10 +1190,6 @@ sudo journalctl -u mqtt-bridge -f
 # Test MQTT
 mosquitto_pub -h localhost -t "smartbin/test" -m "hello"
 mosquitto_sub -h localhost -t "smartbin/#" -v
-
-# Build apps
-cd Project-CPC357_cam && npm run build
-cd Project-CPC357_dashboard && npm run build
 ```
 
 ---
@@ -1348,17 +1201,13 @@ cd Project-CPC357_dashboard && npm run build
 ✅ Cloud infrastructure (GCP VM + Mosquitto)
 ✅ Real-time database (Firebase Firestore)
 ✅ Hardware controller (ESP32 with all sensors)
-✅ Camera application (Object detection + MQTT)
-✅ Dashboard (Monitoring + remote control)
 ✅ MQTT-Firebase bridge (Data synchronization)
 
 ### Next Steps:
 
 1. **Calibrate sensors** for your specific environment
-2. **Train detection model** with more item examples
-3. **Deploy apps** to Firebase Hosting for production
-4. **Set up monitoring** for system health
-5. **Add features**: Email alerts, analytics, scheduling
+2. **Set up monitoring** for system health
+3. **Add features**: Email alerts, analytics, scheduling
 
 ### Performance Metrics
 
@@ -1366,27 +1215,24 @@ After setup, monitor:
 - **MQTT latency**: Should be <200ms
 - **Firebase sync time**: Should be <1s
 - **Servo response time**: Should be <2s
-- **Camera detection**: Should be >90% accuracy
 
 ---
 
 ## 🎉 Congratulations!
 
-Your Smart Recycle Bin system is now **fully operational**! 
+Your Smart Recycle Bin hardware is now **fully operational**! 
 
-You can now:
-- 📱 Detect items with camera on smartphone
-- 🤖 Automatically sort into correct bins
+Hardware capabilities:
+- 🤖 Automatically sort items into correct bins
 - 🔥 Monitor fire alerts in real-time
-- 📊 View dashboard from any browser
-- 🎮 Control hardware remotely
-- 📍 Track GPS location of detections
-- 💾 Store data in Firebase for analysis
+- 🎮 Receive remote commands via MQTT
+- 📊 Send sensor data to cloud
+- 💾 Sync data to Firebase for monitoring
 
 **Happy recycling!** ♻️🌍🚮
 
 ---
 
-**Last Updated:** December 29, 2024
+**Last Updated:** January 8, 2026
 **Version:** 1.0
 **Status:** Production Ready ✅
