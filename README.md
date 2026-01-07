@@ -1,45 +1,201 @@
-# 🚮 Smart Recycle Bin System - Complete Documentation
+# THIS BRANCH IS FOR HARDWARE ONLY 🔧
 
-> **All-in-one setup, architecture, and troubleshooting guide for the AI-powered IoT Smart Recycle Bin with automated sorting, fire detection, and remote monitoring.**
+Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using ESP32-S3 microcontroller with MQTT communication.
+
+## 🚀 Setup and Installation
+
+### Prerequisites
+- Arduino IDE 2.x or higher
+- USB-C cable for ESP32 programming
+- WiFi 2.4GHz network (ESP32 compatible)
+- MQTT broker running on GCP VM (see system architecture)
+
+### Required Hardware Components
+
+| Component | Quantity | Purpose |
+|-----------|----------|---------|
+| **AIoT Maker Feather S3** (ESP32) | 1 | Main microcontroller |
+| **IR Sensor** | 4 | Detect trash fill level per bin |
+| **PIR Sensor** | 1 | Motion detection (bin activity) |
+| **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
+| **DHT11** | 1 | Temperature & humidity |
+| **SG90 Servo** | 2 | Rotation + lid control |
+| **LED** | 8 | Status indicators (4 red, 4 green) |
+| **Relay Module** | 1 | Fire suppression trigger |
+| **Push Button** | 1 | Manual fire alarm reset |
+| **Buzzer** | 1 | Fire alert sound |
+| **USB-C Cable** | 1 | Arduino programming |
+| **5V Power Supply** | 2 | For servos & hardware |
+
+### Step 1: Clone the Repository
+```bash
+git clone -b hardware https://github.com/andy-clos/Project-CPC357.git
+cd Project-CPC357_hardware
+```
+
+If you already have the repository:
+```bash
+git pull origin main
+```
+
+### Step 2: Install Arduino IDE
+
+1. Download Arduino IDE from [arduino.cc/software](https://www.arduino.cc/en/software)
+2. Install and launch the IDE
+
+### Step 3: Add ESP32 Board Support
+
+1. Open Arduino IDE
+2. Go to **File > Preferences**
+3. Add to **Additional Board Manager URLs**:
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+4. Click **OK**
+5. Go to **Tools > Board > Boards Manager**
+6. Search for `esp32`
+7. Install `esp32 by Espressif Systems` (v2.0.0 or higher)
+
+### Step 4: Install Required Libraries
+
+Go to **Tools > Manage Libraries** and install the following:
+- `PubSubClient` (v2.8+) - MQTT client
+- `DHT sensor library` (v1.4+) - DHT11 sensor
+- `Adafruit Unified Sensor` - Sensor framework dependency
+- `ESP32Servo` (v3.0+) - Servo motor control
+- `ArduinoJson` (v6.21+) - JSON parsing
+
+### Step 5: Configure Hardware Settings
+
+Open [project/project.ino](project/project.ino) in Arduino IDE and update the following lines with your configuration:
+
+```cpp
+// WiFi Configuration (replace with your network)
+const char* WIFI_SSID = "YOUR-WIFI-SSID";
+const char* WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";
+
+// MQTT Configuration (replace with your GCP VM IP)
+const char* MQTT_SERVER = "YOUR-MQTT-SERVER-IP";
+const int MQTT_PORT = 1883;
+
+// Bin Identifier
+String binId = "BIN001";  // Use BIN001, BIN002, etc.
+```
+
+> **Important:** All configuration values (WiFi credentials, MQTT server IP) are provided in the project report. Use the exact values as shown.
+
+### Step 6: Upload to ESP32
+
+1. Connect ESP32 to your computer via USB-C cable
+2. In Arduino IDE, go to **Tools** and configure:
+   - **Board**: ESP32S3 Dev Module
+   - **Port**: Select your COM port (e.g., COM3)
+   - **Upload Speed**: 921600
+3. Click the **Upload** button (→) or press Ctrl+U
+4. Wait for "Hard resetting via RTS pin..." message
+5. Upload complete when you see "✓ Success"
+
+### Step 7: Verify Operation
+
+1. Open **Tools > Serial Monitor**
+2. Set baud rate to **115200**
+3. You should see output similar to:
+```
+=== System Initializing ===
+Pins configured...
+Sensors initialized...
+WiFi connecting to: YOUR_WIFI_NAME
+✓ WiFi connected!
+MQTT connecting to: YOUR_MQTT_SERVER
+✓ MQTT connected!
+=== System Ready ===
+```
 
 ---
 
-## 📑 Table of Contents
+## 📡 MQTT Bridge Setup (Node.js)
 
-1. [Overview](#overview)
-2. [System Architecture](#system-architecture)
-3. [Prerequisites & Hardware](#prerequisites--hardware)
-4. [Complete Setup Guide](#complete-setup-guide)
-5. [Communication Architecture](#communication-architecture)
-6. [Remote Control System](#remote-control-system)
-7. [Testing & Verification](#testing--verification)
-8. [Troubleshooting](#troubleshooting)
+The bridge synchronizes data between MQTT broker and Firebase Firestore. This runs on your GCP VM.
+
+### Prerequisites on GCP VM
+- Node.js 18+ installed
+- Mosquitto MQTT broker running
+- Firebase service account key
+
+### Installation
+
+1. SSH into your GCP VM
+2. Create bridge directory:
+```bash
+mkdir mqtt-firebase-bridge
+cd mqtt-firebase-bridge
+```
+
+3. Initialize Node.js project:
+```bash
+npm init -y
+npm install mqtt firebase-admin
+```
+
+4. Upload files to VM:
+```bash
+# From your local machine
+scp bridge.js username@YOUR_VM_IP:~/mqtt-firebase-bridge/
+scp serviceAccountKey.json username@YOUR_VM_IP:~/mqtt-firebase-bridge/
+```
+
+5. Run the bridge:
+```bash
+node bridge.js
+```
+
+### Run as System Service (Optional)
+
+Create service file:
+```bash
+sudo nano /etc/systemd/system/mqtt-bridge.service
+```
+
+Add configuration:
+```ini
+[Unit]
+Description=MQTT to Firebase Bridge
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/home/your-username/mqtt-firebase-bridge
+ExecStart=/usr/bin/node /home/your-username/mqtt-firebase-bridge/bridge.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mqtt-bridge
+sudo systemctl start mqtt-bridge
+sudo systemctl status mqtt-bridge
+```
 
 ---
 
-## Overview
-
-### What is This System?
-
-A complete IoT solution for intelligent waste management that:
-- 🎥 **Detects** recyclable items using AI (TensorFlow.js YOLO/COCO-SSD)
-- 🤖 **Sorts** items automatically using servo-controlled bins
-- 🔥 **Monitors** environmental conditions (temperature, humidity, smoke)
-- 🚨 **Alerts** on fire detection with 10-minute safety cooldown
-- 📊 **Tracks** GPS location and detection history
-- 📱 **Controls** hardware remotely from web dashboard
-- ⚡ **Syncs** real-time data across all devices
+## 🧠 System Overview
 
 ### Key Features
 
 | Feature | Details |
 |---------|---------|
 | **Object Detection** | TensorFlow.js model on smartphone camera |
-| **4-Bin Sorting** | Paper, Plastic, Aluminium, Glass |
-| **Fill Level Monitoring** | 4 independent IR sensors per bin |
+| **Bin Sorting** | Paper, Plastic, Aluminium |
+| **Fill Level Monitoring** | 3 independent IR sensors per bin |
 | **Fire Safety** | MQ-2 smoke sensor + 10-min cooldown |
 | **Environmental Monitoring** | DHT11 (temperature/humidity) |
-| **Remote Control** | 4 action buttons from dashboard |
+| **Remote Control** | Dashboard commands via MQTT |
 | **Real-time Sync** | Firebase Firestore with MQTT bridge |
 | **GPS Tracking** | Location-based detection history |
 
