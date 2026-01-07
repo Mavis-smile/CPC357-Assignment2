@@ -2,26 +2,85 @@
 
 Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for IoT smart bin deployments with GPS tracking and cloud storage.
 
-## 🚀 Quick Start
+## 🚀 Setup and Installation
 
-**Step 1:** Install dependencies
+### Prerequisites
+- Node.js (v16 or higher)
+- npm (comes with Node.js)
+- Git
+
+### Step 1: Clone the Repository
+```bash
+git clone <repository-url>
+cd Project-CPC357_cam
+```
+
+If you already have the repository:
+```bash
+git pull origin main
+```
+
+### Step 2: Install Dependencies
 ```bash
 npm install
 ```
 
-**Step 2:** Configure environment variables  
-Create `.env.local` in the project root:
-```env
-VITE_MAPS_API_KEY=your_google_maps_api_key_here
-```
-> **Note:** Google Maps API key is optional—only needed for reverse geocoding addresses from GPS coordinates.
+### Step 3: Configure Environment Variables
+Create a `.env.local` file in the project root directory:
+```bash
+# For Windows PowerShell
+New-Item .env.local
 
-**Step 3:** Run the development server
+# For macOS/Linux
+touch .env.local
+```
+
+Add the following environment variables to `.env.local`:
+
+```env
+# MQTT Broker (WebSocket URL)
+# Replace with your GCP VM external IP
+VITE_MQTT_BROKER_URL=ws://<YOUR_GCP_VM_IP>:9001
+
+# MQTT Broker Secure (WebSocket Secure URL for HTTPS hosting)
+# Set this after configuring WSS on your broker
+VITE_MQTT_BROKER_URL_SECURE=wss://<YOUR_DOMAIN>
+
+# Firebase Configuration
+# Get these values from Firebase Console > Project Settings > General > Your apps
+VITE_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
+VITE_FIREBASE_AUTH_DOMAIN=<YOUR_PROJECT_ID>.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=<YOUR_PROJECT_ID>
+VITE_FIREBASE_STORAGE_BUCKET=<YOUR_PROJECT_ID>.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=<YOUR_SENDER_ID>
+VITE_FIREBASE_APP_ID=<YOUR_APP_ID>
+VITE_FIREBASE_MEASUREMENT_ID=<YOUR_MEASUREMENT_ID>
+```
+
+#### Required Keys (refer to project report for actual values):
+- **VITE_MQTT_BROKER_URL**: WebSocket URL for MQTT broker (e.g., `ws://34.63.50.190:9001`)
+- **VITE_MQTT_BROKER_URL_SECURE**: Secure WebSocket URL for production (e.g., `wss://cpc357.chickenkiller.com`)
+- **VITE_FIREBASE_API_KEY**: Firebase API key from project settings
+- **VITE_FIREBASE_AUTH_DOMAIN**: Firebase authentication domain
+- **VITE_FIREBASE_PROJECT_ID**: Your Firebase project ID
+- **VITE_FIREBASE_STORAGE_BUCKET**: Firebase storage bucket URL
+- **VITE_FIREBASE_MESSAGING_SENDER_ID**: Firebase messaging sender ID
+- **VITE_FIREBASE_APP_ID**: Firebase app ID
+- **VITE_FIREBASE_MEASUREMENT_ID**: Firebase Analytics measurement ID
+
+> **Important:** All configuration values (IP addresses, domains, and Firebase credentials) are provided in the project report. Copy them exactly as shown.
+
+### Step 4: Run the Development Server
 ```bash
 npm run dev
 ```
 
-**Step 4:** Open the app in your browser and grant camera + location permissions when prompted.
+The application will start at `http://localhost:5173` (or another available port).
+
+### Step 5: Grant Permissions
+When you open the app in your browser, grant the following permissions when prompted:
+- **Camera access** - Required for waste detection
+- **Location access** - Required for GPS tracking of bin location
 
 ---
 
