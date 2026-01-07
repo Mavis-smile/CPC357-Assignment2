@@ -82,8 +82,6 @@ const int MQTT_PORT = 1883;
 String binId = "BIN001";  // Use BIN001, BIN002, etc.
 ```
 
-> **Important:** All configuration values (WiFi credentials, MQTT server IP) are provided in the project report. Use the exact values as shown.
-
 ### Step 6: Upload to ESP32
 
 1. Connect ESP32 to your computer via USB-C cable
@@ -139,7 +137,6 @@ npm install mqtt firebase-admin
 
 4. Upload files to VM:
 ```bash
-# From your local machine
 1. Go to the CPC357 Firebase project and click Project Settings.
 2. Click into Service Accounts and click "Generate new private key".
 3. Rename the file to "serviceAccountKey.json".
@@ -198,10 +195,9 @@ sudo systemctl status mqtt-bridge
 |---------|---------|
 | **Object Detection** | TensorFlow.js model on smartphone camera |
 | **Bin Sorting** | Paper, Plastic, Aluminium |
-| **Fill Level Monitoring** | 3 independent IR sensors (one per bin type) |
-| **Fire Safety** | MQ-2 smoke sensor + 10-min cooldown |
-| **Environmental Monitoring** | DHT11 (temperature/humidity) |
-| **Remote Control** | Dashboard commands via MQTT |
+| **Fill Level Monitoring** | 3 independent IR sensors (one per bin compartment) |
+| **Fire Safety** | MQ-2 smoke sensor + DHT11 sensor + 10-min cooldown |
+| **Remote Control** | Dashboard commands through MQTT |
 | **Real-time Sync** | Firebase Firestore with MQTT bridge |
 | **GPS Tracking** | Location-based detection history |
 
@@ -243,12 +239,12 @@ sudo systemctl status mqtt-bridge
 ┌──────────────────┐                    ┌──────────────────────┐
 │  ESP32-S3 MCU    │                    │   Firebase Cloud     │
 │  (Hardware)      │                    │   ┌──────────────┐   │
-│  - 4x IR Sensors │◄───────────────────┤   │  Firestore   │   │
+│  - 3x IR Sensors │◄───────────────────┤   │  Firestore   │   │
 │  - PIR Sensor    │     Real-time      │   │  Database    │   │
 │  - MQ-2 Sensor   │     Sync           │   └──────────────┘   │
 │  - DHT11         │                    │   ┌──────────────┐   │
 │  - 2x Servos     │                    │   │  Collections │   │
-│  - 8x LEDs       │                    │   │  - bins      │   │
+│  - 2x LEDs       │                    │   │  - bins      │   │
 │  - Relay         │                    │   │  - detections│   │
 │  - Push Button   │                    │   │  - commands  │   │
 │  - Buzzer        │                    │   │  - alerts    │   │
@@ -263,32 +259,6 @@ sudo systemctl status mqtt-bridge
                                     │  - Remote control      │
                                     │  - Alerts & analytics  │
                                     └────────────────────────┘
-```
-
-### Data Flow Diagram
-
-```
-📱 Camera App          🎛️ ESP32 Hardware      📊 Dashboard          🔥 Firebase
-    │                        │                      │                   │
-    │──[WiFi]──────→ MQTT Broker ←────────────────[WiFi]─────────────────┤
-    │                        │                      │                   │
-    └─[WebSocket 9001]──────[TCP 1883]──────────────┘                   │
-         Publish:              │                                         │
-         smartbin/item         │                  Subscribe:             │
-         (95% plastic)         │                  bins collection        │
-                              │                  with fillLevels        │
-                              │                                         │
-                        Subscribe:                                      │
-                        smartbin/commands         ┌───────────────→ Write
-                        smartbin/item             │  Publish:
-                                                  │  smartbin/sensors
-                              │                   │  (temp, humidity, etc)
-                              │                   │
-                    Publish:   │                   ↓
-                    smartbin/sensors              MQTT-Firebase
-                    smartbin/alerts               Bridge Script
-                              │                       │
-                              └───[MQTT]──→[Node.js]──┘
 ```
 
 ---
