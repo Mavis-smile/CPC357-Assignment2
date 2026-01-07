@@ -80,7 +80,6 @@ Open the app in your browser. No camera or location permissions are needed for d
 
 | Category | Technology |
 |----------|-----------|
-
 | **Framework** | React 18, TypeScript, Vite |
 | **Styling** | Tailwind CSS v3 |
 | **Database** | Firebase Firestore |
