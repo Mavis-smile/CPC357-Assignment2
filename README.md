@@ -15,17 +15,17 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 | Component | Quantity | Purpose |
 |-----------|----------|---------|
 | **Maker Feather AIoT S3** (ESP32) | 1 | Main microcontroller |
-| **IR Sensor** | 3 | Detect trash fill level per bin |
+| **IR Sensor** | 3 | Detect trash fill level (Paper, Plastic, Aluminium) |
 | **PIR Sensor** | 1 | Motion detection (bin activity) |
 | **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
 | **DHT11** | 1 | Temperature & humidity |
-| **SG90 Servo** | 2 | Rotation + lid control |
-| **LED** | 8 | Status indicators (1 red, 1 green) |
-| **Relay Module** | 1 | Fire suppression trigger |
+| **SG90 Servo** | 2 | Container rotation + lid control |
+| **Red LED** | 1 | Bin full indicator |
+| **Green LED** | 1 | Bin available indicator |
 | **Push Button** | 1 | Manual fire alarm reset |
-| **Buzzer** | 1 | Fire alert sound |
+| **Buzzer** | 1 | Fire alert sound (built-in inside mcu) |
 | **USB-C Cable** | 1 | Arduino programming |
-| **5V Power Supply** | 2 | For servos & hardware |
+| **5V Power Supply** | 1 | For servos |
 
 ### Step 1: Clone the Repository
 ```bash
@@ -192,12 +192,14 @@ sudo systemctl status mqtt-bridge
 |---------|---------|
 | **Object Detection** | TensorFlow.js model on smartphone camera |
 | **Bin Sorting** | Paper, Plastic, Aluminium |
-| **Fill Level Monitoring** | 3 independent IR sensors per bin |
+| **Fill Level Monitoring** | 3 independent IR sensors (one per bin type) |
 | **Fire Safety** | MQ-2 smoke sensor + 10-min cooldown |
 | **Environmental Monitoring** | DHT11 (temperature/humidity) |
 | **Remote Control** | Dashboard commands via MQTT |
 | **Real-time Sync** | Firebase Firestore with MQTT bridge |
 | **GPS Tracking** | Location-based detection history |
+
+---
 
 ---
 
@@ -300,17 +302,17 @@ sudo systemctl status mqtt-bridge
 | Component | Quantity | Purpose |
 |-----------|----------|---------|
 | **AIoT Maker Feather S3** (ESP32) | 1 | Main microcontroller |
-| **IR Sensor** | 4 | Detect trash fill level per bin |
+| **IR Sensor** | 3 | Detect trash fill level (Paper, Plastic, Aluminium) |
 | **PIR Sensor** | 1 | Motion detection (bin activity) |
 | **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
 | **DHT11** | 1 | Temperature & humidity |
-| **SG90 Servo** | 2 | Rotation + lid control |
-| **LED** | 8 | Status indicators (4 red, 4 green) |
-| **Relay Module** | 1 | Fire suppression trigger |
+| **SG90 Servo** | 2 | Container rotation + lid control |
+| **Red LED** | 1 | Bin full indicator |
+| **Green LED** | 1 | Bin available indicator |
 | **Push Button** | 1 | Manual fire alarm reset |
-| **Buzzer** | 1 | Fire alert sound |
+| **Buzzer** | 1 | Fire alert sound (built-in) |
 | **USB-C Cable** | 1 | Arduino programming |
-| **5V Power Supply** | 2 | For servos & hardware |
+| **5V Power Supply** | 1 | For servos |
 
 ### Network Requirements
 
