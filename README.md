@@ -2,6 +2,8 @@
 
 Web dashboard for real-time monitoring, analytics, and remote control of IoT smart bins. Visualizes bin locations, fill levels, recent detections, and allows officers to send remote commands (e.g., close lid, mark emptied).
 
+Deployed Dashboard URL: https://project-cpc-357.vercel.app/
+
 ## 🚀 Setup and Installation
 
 ### Prerequisites
