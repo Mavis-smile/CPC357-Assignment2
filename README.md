@@ -1,6 +1,6 @@
 # THIS BRANCH IS FOR HARDWARE ONLY 🔧
 
-Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using ESP32-S3 microcontroller with MQTT communication.
+Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using Maker Feather AIoT S3 microcontroller with MQTT communication.
 
 ## 🚀 Setup and Installation
 
@@ -14,13 +14,13 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 
 | Component | Quantity | Purpose |
 |-----------|----------|---------|
-| **AIoT Maker Feather S3** (ESP32) | 1 | Main microcontroller |
-| **IR Sensor** | 4 | Detect trash fill level per bin |
+| **Maker Feather AIoT S3** (ESP32) | 1 | Main microcontroller |
+| **IR Sensor** | 3 | Detect trash fill level per bin |
 | **PIR Sensor** | 1 | Motion detection (bin activity) |
 | **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
 | **DHT11** | 1 | Temperature & humidity |
 | **SG90 Servo** | 2 | Rotation + lid control |
-| **LED** | 8 | Status indicators (4 red, 4 green) |
+| **LED** | 8 | Status indicators (1 red, 1 green) |
 | **Relay Module** | 1 | Fire suppression trigger |
 | **Push Button** | 1 | Manual fire alarm reset |
 | **Buzzer** | 1 | Fire alert sound |
