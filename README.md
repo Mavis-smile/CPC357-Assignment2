@@ -2,191 +2,6 @@
 
 Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using Maker Feather AIoT S3 microcontroller with MQTT communication.
 
-## 🚀 Setup and Installation
-
-### Prerequisites
-- Arduino IDE 2.x or higher
-- USB-C cable for ESP32 programming
-- WiFi 2.4GHz network (ESP32 compatible)
-- MQTT broker running on GCP VM (see system architecture)
-
-### Required Hardware Components
-
-| Component | Quantity | Purpose |
-|-----------|----------|---------|
-| **Maker Feather AIoT S3** (ESP32) | 1 | Main microcontroller |
-| **IR Sensor** | 3 | Detect trash fill level (Paper, Plastic, Aluminium) |
-| **PIR Sensor** | 1 | Motion detection (bin activity) |
-| **MQ-2 Gas Sensor** | 1 | Smoke/fire detection |
-| **DHT11** | 1 | Temperature & humidity |
-| **SG90 Servo** | 2 | Container rotation + lid control |
-| **Red LED** | 1 | Bin full indicator or fire alert |
-| **Green LED** | 1 | Bin available indicator |
-| **Push Button** | 1 | Manual fire alarm reset |
-| **Buzzer** | 1 | Fire alert sound (built-in inside mcu) |
-| **USB-C Cable** | 1 | Arduino programming |
-| **Smart Phone** | 1 | For camera object detection and GPS tracking |
-
-### Step 1: Clone the Repository
-```bash
-git clone -b hardware https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357
-```
-
-If you already have the repository:
-```bash
-git pull origin main
-```
-
-### Step 2: Install Arduino IDE
-
-1. Download Arduino IDE from [arduino.cc/software](https://www.arduino.cc/en/software)
-2. Install and launch the IDE
-
-### Step 3: Add ESP32 Board Support
-
-1. Open Arduino IDE
-2. Go to **File > Preferences**
-3. Add to **Additional Board Manager URLs**:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-4. Click **OK**
-5. Go to **Tools > Board > Boards Manager**
-6. Search for `esp32`
-7. Install `esp32 by Espressif Systems` (v2.0.0 or higher)
-
-### Step 4: Install Required Libraries
-
-Go to **Tools > Manage Libraries** and install the following:
-- `PubSubClient` (v2.8+) - MQTT client
-- `DHT sensor library` (v1.4+) - DHT11 sensor
-- `Adafruit Unified Sensor` - Sensor framework dependency
-- `ESP32Servo` (v3.0+) - Servo motor control
-- `ArduinoJson` (v6.21+) - JSON parsing
-
-### Step 5: Configure Hardware Settings
-
-Open [project/project.ino](project/project.ino) in Arduino IDE and update the following lines with your configuration:
-
-```cpp
-// WiFi Configuration (replace with your network)
-const char* WIFI_SSID = "YOUR-WIFI-SSID";
-const char* WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";
-
-// MQTT Configuration (replace with your GCP VM IP)
-const char* MQTT_SERVER = "YOUR-MQTT-SERVER-IP";
-const int MQTT_PORT = 1883;
-
-// Bin Identifier
-String binId = "BIN001";  // Use BIN001, BIN002, etc.
-```
-
-### Step 6: Upload to ESP32
-
-1. Connect ESP32 to your computer via USB-C cable
-2. In Arduino IDE, go to **Tools** and configure:
-   - **Board**: Cytron Maker Feather AIoT S3
-   - **Port**: Select your COM port (e.g., COM3)
-   - **Upload Speed**: 921600
-3. Click the **Upload** button (→) or press Ctrl+U
-4. Wait for "Hard resetting via RTS pin..." message
-5. Upload complete when you see "✓ Success"
-
-### Step 7: Verify Operation
-
-1. Open **Tools > Serial Monitor**
-2. Set baud rate to **9600**
-3. You should see output similar to:
-```
-=== System Initializing ===
-Pins configured...
-Sensors initialized...
-WiFi connecting to: YOUR_WIFI_NAME
-✓ WiFi connected!
-MQTT connecting to: YOUR_MQTT_SERVER
-✓ MQTT connected!
-=== System Ready ===
-```
-
----
-
-## 📡 MQTT Bridge Setup (Node.js)
-
-The bridge synchronizes data between MQTT broker and Firebase Firestore. This runs on the GCP VM.
-
-### Prerequisites on GCP VM
-- Node.js 18+ installed
-- Mosquitto MQTT broker running
-- Firebase service account key
-
-### Installation
-
-1. SSH into the GCP VM
-2. Create bridge directory:
-```bash
-mkdir mqtt-firebase-bridge
-cd mqtt-firebase-bridge
-```
-
-3. Initialize Node.js project:
-```bash
-npm init -y
-npm install mqtt firebase-admin
-```
-
-4. Upload files to VM:
-```bash
-1. Go to the CPC357 Firebase project and click Project Settings.
-2. Click into Service Accounts and click "Generate new private key".
-3. Rename the file to "serviceAccountKey.json".
-4. Back to the GCP VM SSH.
-5. Click the "Upload File" button at the top and upload the serviceAccountKey.json file.
-6. cd ../
-7. mv serviceAccountKey.json /mqtt-firebase-bridge
-8. cd mqtt-firebase-bridge
-```
-
-5. Run the bridge:
-```bash
-node bridge.js
-```
-
-### Run as System Service (Optional)
-
-Create service file:
-```bash
-sudo nano /etc/systemd/system/mqtt-bridge.service
-```
-
-Add configuration (change your username):
-```ini
-[Unit]
-Description=MQTT to Firebase Bridge
-After=network.target
-
-[Service]
-Type=simple
-User=your-username
-WorkingDirectory=/home/your-username/mqtt-firebase-bridge
-ExecStart=/usr/bin/node /home/your-username/mqtt-firebase-bridge/bridge.js
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable mqtt-bridge
-sudo systemctl start mqtt-bridge
-sudo systemctl status mqtt-bridge
-```
-
----
-
 ## 🧠 System Overview
 
 ### Key Features
@@ -245,10 +60,10 @@ sudo systemctl status mqtt-bridge
 │  - DHT11         │                    │   ┌──────────────┐   │
 │  - 2x Servos     │                    │   │  Collections │   │
 │  - 2x LEDs       │                    │   │  - bins      │   │
-│  - Relay         │                    │   │  - detections│   │
-│  - Push Button   │                    │   │  - commands  │   │
-│  - Buzzer        │                    │   │  - alerts    │   │
-└──────────────────┘                    └──────┬───────────────┘
+│  - Push Button   │                    │   │  - detections│   │
+│  - Buzzer        │                    │   │  - commands  │   │
+└──────────────────┘                    │   │  - alerts    │   │
+                                        └──────┬───────────────┘
                                                │ WiFi/Internet
                                                ▼
                                     ┌────────────────────────┐
@@ -331,24 +146,38 @@ sudo systemctl status mqtt-bridge
 # Via Google Cloud Console:
 1. Compute Engine > VM instances > CREATE INSTANCE
 2. Name: smart-bin-mqtt
-3. Region: us-central1 (or nearest to you)
-4. Machine type: e2-micro (free tier eligible)
-5. Boot disk: Ubuntu 22.04 LTS, 10GB
-6. Firewall: ✅ Allow HTTP, ✅ Allow HTTPS
-7. Click CREATE
+3. Region: (use default region)
+4. Machine type: e2-medium
+5. Boot disk: Ubuntu 24.04 LTS Minimal, 10GB
+6. Click CREATE
 ```
 
 **Configure Firewall Rules:**
 ```bash
-# Allow MQTT (TCP 1883) for ESP32
-gcloud compute firewall-rules create allow-mqtt \
-  --allow tcp:1883 \
-  --description "MQTT for ESP32"
+# Via Google Cloud Console:
+1. Go to VPC Network > Firewall
+2. Click CREATE FIREWALL RULE
 
-# Allow WebSocket (TCP 9001) for camera browser app
-gcloud compute firewall-rules create allow-mqtt-ws \
-  --allow tcp:9001 \
-  --description "MQTT WebSocket for camera app"
+# Rule 1: Allow MQTT (TCP 1883) for ESP32
+3. Name: allow-mqtt
+4. Direction of traffic: Ingress
+5. Action on match: Allow
+6. Targets: All instances in the network
+7. Source IP ranges: 0.0.0.0/0
+8. Protocols and ports: ✅ Specified protocols and ports
+   - tcp: 1883
+9. Click CREATE
+
+# Rule 2: Allow WebSocket (TCP 9001) for camera browser app
+10. Click CREATE FIREWALL RULE again
+11. Name: allow-mqtt-ws
+12. Direction of traffic: Ingress
+13. Action on match: Allow
+14. Targets: All instances in the network
+15. Source IP ranges: 0.0.0.0/0
+16. Protocols and ports: ✅ Specified protocols and ports
+    - tcp: 9001
+17. Click CREATE
 ```
 
 **SSH into VM and Install Mosquitto:**
@@ -397,15 +226,15 @@ mosquitto_pub -h localhost -t "test" -m "Hello MQTT"
 #### Step 3️⃣: Install Node.js
 
 ```bash
-# Add Node.js 18 repository
+# Add Node.js 20 repository
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 
 # Install Node.js
 sudo apt install -y nodejs
 
 # Verify installation
-node --version  # v18.x.x
-npm --version   # 9.x.x or higher
+node --version  # v20.x.x
+npm --version   # 10.x.x or higher
 ```
 
 #### Step 4️⃣: Create MQTT-Firebase Bridge (15 min)
@@ -425,11 +254,17 @@ npm install mqtt firebase-admin
 
 **Upload files to VM:**
 ```bash
-# From your computer, upload bridge.js
-scp bridge.js username@YOUR_GCP_VM_EXTERNAL_IP:~/mqtt-firebase-bridge/
-
-# Upload Firebase service account key
-scp serviceAccountKey.json username@YOUR_GCP_VM_EXTERNAL_IP:~/mqtt-firebase-bridge/
+1. Go to the CPC357 Firebase project and click Project Settings.
+2. Click into Service Accounts and click "Generate new private key".
+3. Rename the file to "serviceAccountKey.json".
+4. Back to the GCP VM SSH.
+5. Click the "Upload file" button at the top and upload the bridge.js file.
+6. Click the "Upload file" button again and upload the serviceAccountKey.json file.
+7. Move both files to the mqtt-firebase-bridge directory:
+   cd ~
+   mv bridge.js mqtt-firebase-bridge/
+   mv serviceAccountKey.json mqtt-firebase-bridge/
+   cd mqtt-firebase-bridge
 ```
 
 **Test bridge manually:**
@@ -487,6 +322,22 @@ sudo systemctl daemon-reload
 sudo systemctl enable mqtt-bridge
 sudo systemctl start mqtt-bridge
 sudo systemctl status mqtt-bridge  # Should show "active (running)"
+```
+
+**Monitor Bridge in Real-time:**
+```bash
+# Terminal 1: Watch bridge logs (shows MQTT messages being processed)
+sudo journalctl -u mqtt-bridge -f
+
+# Terminal 2: Monitor all MQTT topics (shows raw MQTT messages)
+mosquitto_sub -h localhost -t "smartbin/#" -v
+```
+
+Expected output in Terminal 1:
+```
+Jan 08 10:30:15 smart-bin-mqtt node[1234]: ✅ Connected to MQTT broker
+Jan 08 10:30:15 smart-bin-mqtt node[1234]: 📡 Subscribed to smartbin/sensors
+Jan 08 10:30:25 smart-bin-mqtt node[1234]: 📊 Sensor data received from BIN001
 ```
 
 ---
@@ -1161,48 +1012,3 @@ sudo journalctl -u mqtt-bridge -f
 mosquitto_pub -h localhost -t "smartbin/test" -m "hello"
 mosquitto_sub -h localhost -t "smartbin/#" -v
 ```
-
----
-
-## Support & Next Steps
-
-### You've Successfully Set Up:
-
-✅ Cloud infrastructure (GCP VM + Mosquitto)
-✅ Real-time database (Firebase Firestore)
-✅ Hardware controller (ESP32 with all sensors)
-✅ MQTT-Firebase bridge (Data synchronization)
-
-### Next Steps:
-
-1. **Calibrate sensors** for your specific environment
-2. **Set up monitoring** for system health
-3. **Add features**: Email alerts, analytics, scheduling
-
-### Performance Metrics
-
-After setup, monitor:
-- **MQTT latency**: Should be <200ms
-- **Firebase sync time**: Should be <1s
-- **Servo response time**: Should be <2s
-
----
-
-## 🎉 Congratulations!
-
-Your Smart Recycle Bin hardware is now **fully operational**! 
-
-Hardware capabilities:
-- 🤖 Automatically sort items into correct bins
-- 🔥 Monitor fire alerts in real-time
-- 🎮 Receive remote commands via MQTT
-- 📊 Send sensor data to cloud
-- 💾 Sync data to Firebase for monitoring
-
-**Happy recycling!** ♻️🌍🚮
-
----
-
-**Last Updated:** January 8, 2026
-**Version:** 1.0
-**Status:** Production Ready ✅
