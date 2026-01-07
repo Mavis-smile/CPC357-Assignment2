@@ -88,7 +88,7 @@ String binId = "BIN001";  // Use BIN001, BIN002, etc.
 
 1. Connect ESP32 to your computer via USB-C cable
 2. In Arduino IDE, go to **Tools** and configure:
-   - **Board**: ESP32S3 Dev Module
+   - **Board**: Cytron Maker Feather AIoT S3
    - **Port**: Select your COM port (e.g., COM3)
    - **Upload Speed**: 921600
 3. Click the **Upload** button (→) or press Ctrl+U
@@ -98,7 +98,7 @@ String binId = "BIN001";  // Use BIN001, BIN002, etc.
 ### Step 7: Verify Operation
 
 1. Open **Tools > Serial Monitor**
-2. Set baud rate to **115200**
+2. Set baud rate to **9600**
 3. You should see output similar to:
 ```
 === System Initializing ===
@@ -115,7 +115,7 @@ MQTT connecting to: YOUR_MQTT_SERVER
 
 ## 📡 MQTT Bridge Setup (Node.js)
 
-The bridge synchronizes data between MQTT broker and Firebase Firestore. This runs on your GCP VM.
+The bridge synchronizes data between MQTT broker and Firebase Firestore. This runs on the GCP VM.
 
 ### Prerequisites on GCP VM
 - Node.js 18+ installed
@@ -124,7 +124,7 @@ The bridge synchronizes data between MQTT broker and Firebase Firestore. This ru
 
 ### Installation
 
-1. SSH into your GCP VM
+1. SSH into the GCP VM
 2. Create bridge directory:
 ```bash
 mkdir mqtt-firebase-bridge
@@ -140,8 +140,13 @@ npm install mqtt firebase-admin
 4. Upload files to VM:
 ```bash
 # From your local machine
-scp bridge.js username@YOUR_VM_IP:~/mqtt-firebase-bridge/
-scp serviceAccountKey.json username@YOUR_VM_IP:~/mqtt-firebase-bridge/
+Go to the CPC357 Firebase project and click Project Settings.
+Click into Service Accounts and click "Generate new private key".
+Rename the file to "serviceAccountKey.json".
+Back to the GCP VM SSH.
+Click the "Upload File" button at the top and upload the serviceAccountKey.json file.
+cd ../
+mv serviceAccountKey.json /mqtt-firebase-bridge
 ```
 
 5. Run the bridge:
@@ -156,7 +161,7 @@ Create service file:
 sudo nano /etc/systemd/system/mqtt-bridge.service
 ```
 
-Add configuration:
+Add configuration (change your username):
 ```ini
 [Unit]
 Description=MQTT to Firebase Bridge
@@ -325,9 +330,9 @@ sudo systemctl status mqtt-bridge
 
 ## Complete Setup Guide
 
-### Phase 1: Cloud Infrastructure (45 minutes)
+### Phase 1: Cloud Infrastructure
 
-#### Step 1️⃣: Firebase Setup (5 min)
+#### Step 1️⃣: Firebase Setup
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click **Add project** → Enter name: `Smart-Recycle-Bin`
@@ -348,7 +353,7 @@ sudo systemctl status mqtt-bridge
    - Download as JSON
    - Rename to `serviceAccountKey.json`
 
-#### Step 2️⃣: GCP VM Setup (10 min)
+#### Step 2️⃣: GCP VM Setup
 
 **Create VM Instance:**
 ```bash
@@ -418,7 +423,7 @@ mosquitto_pub -h localhost -t "test" -m "Hello MQTT"
 # Terminal 1 should display: test Hello MQTT
 ```
 
-#### Step 3️⃣: Install Node.js (5 min)
+#### Step 3️⃣: Install Node.js
 
 ```bash
 # Add Node.js 18 repository
@@ -515,7 +520,7 @@ sudo systemctl status mqtt-bridge  # Should show "active (running)"
 
 ---
 
-### Phase 2: Hardware Setup (20 minutes)
+### Phase 2: Hardware Setup
 
 #### Step 5️⃣: Arduino IDE & ESP32 Board
 
@@ -589,7 +594,7 @@ MQTT connecting to: 192.168.x.x
 
 ---
 
-### Phase 3: Web Applications (15 minutes)
+### Phase 3: Web Applications
 
 #### Step 7️⃣: Camera App Setup
 
