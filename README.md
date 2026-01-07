@@ -11,7 +11,7 @@ Real-time waste detection system using AI-powered camera vision to identify and 
 
 ### Step 1: Clone the Repository
 ```bash
-git clone <repository-url>
+git clone -b camera https://github.com/andy-clos/Project-CPC357.git
 cd Project-CPC357_cam
 ```
 
@@ -98,8 +98,8 @@ When you open the app in your browser, grant the following permissions when prom
 ### Detection Model Details
 - **Model:** COCO-SSD pre-trained on 80 object classes
 - **Performance:** Real-time detection at ~2 FPS
-- **Smart Filtering:** Automatically suppresses hand/person detections when waste items are present
-- **Categories:** Recyclable, Organic, Paper, General waste
+- **Smart Filtering:** Automatically exclude hand/person detections when waste items are present
+- **Categories:** Paper, Aluminium, Plastic
 
 ---
 
@@ -165,57 +165,8 @@ Edit `src/TrashDetection.tsx`:
 const [binId] = useState('BIN001');  // Change to BIN002, BIN003, etc.
 ```
 
-### Adjust Detection Sensitivity
-Modify confidence threshold in `src/TrashDetection.tsx`:
-```typescript
-if (!isSaving && highestConfidence.score > 0.7) {  // Change 0.7 (70%) as needed
-  saveDetectionToFirebase(newDetection);
-}
-```
-
 ### Add Continuous Location Tracking
 Implement `watchPosition` in `src/binLocation.ts` for real-time bin movement tracking.
-
----
-
-## 🔐 Security Recommendations
-
-Currently, Firestore writes are unauthenticated for kiosk deployment. For production:
-
-```javascript
-// Firestore Security Rules (example)
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /detections/{document} {
-      allow write: if true;              // Kiosk write access
-      allow read: if request.auth != null;  // Authenticated read
-    }
-    match /bins/{binId} {
-      allow write: if true;
-      allow read: if request.auth != null;
-    }
-  }
-}
-```
-
----
-
-## 🚢 Deployment
-
-Build for production:
-```bash
-npm run build
-```
-
-Output will be in `dist/` folder. Deploy to:
-- **Vercel** / **Netlify** (recommended for static hosting)
-- **Firebase Hosting**
-- Any CDN or static web server
-
-**Requirements:**
-- HTTPS is required for camera and geolocation permissions
-- Configure Firebase project credentials in `src/firebase.ts`
 
 ---
 
@@ -225,8 +176,5 @@ Output will be in `dist/` folder. Deploy to:
 |---------|-------------|
 | `npm install` | Install dependencies |
 | `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build |
-| `npm run lint` | Run ESLint |
 
 ---
