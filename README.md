@@ -191,11 +191,50 @@ curl -X POST http://YOUR_GCP_VM_IP:5000/webhook/detection \
     "timestamp": 1704672000000
   }'
 
+## 1. Frontend (Vercel)
 
-Optional: HTTPS (Production)
+Your React + Vite frontend runs on Vercel (hosted online).
 
-Use Certbot + domain
+Frontend calls your backend API via the VITE_API_BASE_URL environment variable.
 
-Update Flask SSL context
+Example:
 
-Update GCP_HARDWARE_WEBHOOK_URL to https://yourdomain.com/webhook/detection
+VITE_API_BASE_URL=https://34.61.86.159:4000/api   # or HTTPS if using domain + SSL
+
+
+Frontend doesn’t need Node backend locally—it just sends HTTP requests to your GCP VM.
+
+## 2. Backend (Node.js on GCP VM)
+
+Node backend (server.js) handles:
+
+MongoDB reads/writes
+
+/api/detections → saves detection
+
+/api/bins → bin data
+
+Frontend talks to backend through the public IP (or your domain if using HTTPS).
+
+## 3. Webhook (Python/Flask on GCP VM)
+
+Backend automatically calls your hardware webhook after saving a detection:
+
+POST http://34.61.86.159:5000/webhook/detection
+
+
+Webhook server controls servo motors or other hardware actions.
+
+It can run on the same VM as backend or separate, just make sure the backend URL points to it.
+
+## 4. Flow of data
+
+User opens frontend (Vercel) → uses camera or input.
+
+Frontend sends detection to GCP backend API.
+
+Backend saves to MongoDB and triggers webhook.
+
+Webhook handles hardware actions.
+
+Backend responds → frontend updates UI.

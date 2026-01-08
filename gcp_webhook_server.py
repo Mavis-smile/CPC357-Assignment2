@@ -1,6 +1,6 @@
 """
 GCP Hardware Webhook Server
-Deploy this on your GCP VM at 34.63.218.151 to receive detection events via HTTP
+Deploy this on your GCP VM at your external ip address to receive detection events via HTTP
 """
 
 from flask import Flask, request, jsonify
@@ -84,9 +84,9 @@ def health_check():
 
 if __name__ == '__main__':
     print("🚀 Starting GCP Hardware Webhook Server")
-    print(f"📍 Listening on http://34.63.218.151:5000")
-    print(f"🔗 Webhook endpoint: http://34.63.218.151:5000/webhook/detection")
-    print(f"💚 Health check: http://34.63.218.151:5000/health\n")
+    print(f"📍 Listening on http://<GCP_EXTERNAL_IP_ADDRESS>:5000")
+    print(f"🔗 Webhook endpoint: http://<GCP_EXTERNAL_IP_ADDRESS>:5000/webhook/detection")
+    print(f"💚 Health check: http://<GCP_EXTERNAL_IP_ADDRESS>:5000/health\n")
     
     # Run on all interfaces so it's accessible from external IP
     app.run(host='0.0.0.0', port=5000)
