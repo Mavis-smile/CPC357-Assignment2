@@ -127,7 +127,7 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 2. Name: smart-bin-mqtt
 3. Region: (use default region)
 4. Machine type: e2-medium
-5. Boot disk: Ubuntu 24.04 LTS Minimal, 10GB
+5. Boot disk: Ubuntu 24.04 LTS Minimal (x86/64, amd64 noble minimal image built on 2025-12-17), 10GB
 6. Click CREATE
 ```
 
@@ -168,6 +168,7 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install mosquitto mosquitto-clients -y
 
 # Edit Mosquitto configuration
+sudo apt install nano
 sudo nano /etc/mosquitto/mosquitto.conf
 ```
 
