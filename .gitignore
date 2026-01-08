@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.local
 
 # Model files (too large for git)
 *.pt

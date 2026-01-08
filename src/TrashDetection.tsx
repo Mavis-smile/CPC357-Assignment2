@@ -2,10 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import Webcam from 'react-webcam';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import '@tensorflow/tfjs-backend-webgl';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
 import { captureAndStoreLocation, BinLocationData } from './binLocation';
-import { publishItemDetection, isMQTTConnected } from './mqttClient';
+import { postDetection } from './apiClient';
 
 interface Detection {
   class: string;
@@ -30,25 +28,12 @@ const TrashDetection = () => {
   const [modelError, setModelError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<string>('');
   const [binLocation, setBinLocation] = useState<BinLocationData | null>(null);
-  const [mqttStatus, setMqttStatus] = useState<boolean>(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const cooldownDuration = 8000; // 8 seconds cooldown after detection
 
   // Enhanced detection - filter out person/hand detections when other objects present
   const ignoredClasses = ['person'];
-  
-  // Check MQTT connection status periodically
-  useEffect(() => {
-    const checkMQTT = () => {
-      setMqttStatus(isMQTTConnected());
-    };
-    
-    checkMQTT();
-    const interval = setInterval(checkMQTT, 3000);
-    
-    return () => clearInterval(interval);
-  }, []);
 
   // Cooldown timer - update remaining time every 100ms
   useEffect(() => {
@@ -144,8 +129,8 @@ const TrashDetection = () => {
     return '';
   };
 
-  // Save detection to Firebase AND publish to MQTT for immediate servo control
-  const saveDetectionToFirebase = async (detection: TrashDetection) => {
+  // Save detection to API/Mongo (via backend) and publish to MQTT for immediate servo control
+  const saveDetection = async (detection: TrashDetection) => {
     setIsSaving(true);
     try {
       const category = getTrashCategory(detection.class);
@@ -160,40 +145,25 @@ const TrashDetection = () => {
       const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const customDocId = `${binId}_${timestamp}_${detection.class.replace(/\s+/g, '-')}`;
       
-      // 1. Publish to MQTT for immediate servo control
-      try {
-        await publishItemDetection({
-          binId: binId,
-          category: category,
-          itemClass: detection.class,
-          confidence: detection.confidence,
-          latitude: binLocation?.latitude,
-          longitude: binLocation?.longitude
-        });
-        console.log(`📤 MQTT: Sent to hardware for servo control`);
-      } catch (mqttError) {
-        console.error('⚠️ MQTT publish failed (servo may not move):', mqttError);
-        // Continue to save in Firebase even if MQTT fails
-      }
-      
-      // 2. Save to Firebase for dashboard history
-      await addDoc(collection(db, 'detections'), {
+      // Save detection to backend - backend will forward to GCP hardware via HTTPS webhook
+      await postDetection({
         documentId: customDocId,
         binId: binId,
         itemClass: detection.class,
         category: category,
         confidence: detection.confidence,
-        timestamp: serverTimestamp(),
-        detectedAt: detection.timestamp,
-        address: binLocation?.address || null
+        detectedAt: detection.timestamp.toISOString(),
+        address: binLocation?.address || null,
+        latitude: binLocation?.latitude,
+        longitude: binLocation?.longitude
       });
-      console.log(`✅ Firebase: Detection saved for dashboard`);
+      console.log(`✅ Detection saved and sent to hardware`);
       
       // Start cooldown after successful save
       setIsInCooldown(true);
       setCooldownRemaining(cooldownDuration);
     } catch (error) {
-      console.error('Error saving to Firebase:', error);
+      console.error('Error saving detection:', error);
     } finally {
       setIsSaving(false);
     }
@@ -254,7 +224,7 @@ const TrashDetection = () => {
 
           // Only save if not already saving and not in cooldown
           if (!isSaving && !isInCooldown && top.score > 0.1) {
-            await saveDetectionToFirebase(newDetection);
+            await saveDetection(newDetection);
           }
         } else {
           setCurrentItem('');
@@ -370,16 +340,6 @@ const TrashDetection = () => {
             </div>
             
             <div className="flex flex-col items-center gap-2">
-              {/* MQTT Status Indicator */}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border-2 text-xs font-semibold ${
-                mqttStatus 
-                  ? 'bg-green-100 text-green-700 border-green-300' 
-                  : 'bg-red-100 text-red-700 border-red-300'
-              }`}>
-                <span className={`inline-block w-2 h-2 rounded-full ${mqttStatus ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                <span>{mqttStatus ? 'Hardware Connected' : 'Hardware Offline'}</span>
-              </div>
-              
               <div className="flex items-center gap-3">
                 {isModelLoading ? (
                   <div className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-full border-2 border-amber-300">

@@ -1,5 +1,4 @@
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { upsertBinLocation } from './apiClient';
 
 export interface BinLocationData {
   binId: string;
@@ -8,7 +7,6 @@ export interface BinLocationData {
   accuracy: number; // meters
   method: 'single' | 'watch' | 'ip';
   address?: string | null;
-  updatedAt?: any; // serverTimestamp()
 }
 
 // Attempt a quick permission probe so we can fail fast on blocked geolocation in production
@@ -103,16 +101,18 @@ export const reverseGeocode = async (lat: number, lng: number): Promise<string |
 
 // Save or update bin metadata/location document keyed by binId in `bins` collection
 export const saveBinLocation = async (location: BinLocationData): Promise<void> => {
-  const ref = doc(db, 'bins', location.binId);
-  await setDoc(ref, {
-    binId: location.binId,
-    latitude: location.latitude,
-    longitude: location.longitude,
-    accuracy: location.accuracy,
-    method: location.method,
-    address: location.address || null,
-    updatedAt: serverTimestamp()
-  }, { merge: true });
+  try {
+    await upsertBinLocation({
+      binId: location.binId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+      method: location.method,
+      address: location.address ?? null
+    });
+  } catch (err) {
+    console.error('Failed to persist bin location (continuing without DB):', err);
+  }
 };
 
 // Convenience: capture & persist once (optionally reverse geocode)

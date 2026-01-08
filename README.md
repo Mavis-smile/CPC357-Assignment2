@@ -1,184 +1,201 @@
-# THIS BRANCH IS FOR CAMERA ONLY 🗑️
+🗑️ Smart Recycle Bin – Camera-Only Branch
 
-Real-time waste detection system using AI-powered camera vision to identify and classify trash items. Built for Smart Recycle Bin IoT System deployments with GPS tracking and cloud storage.
+Real-time waste detection system using AI-powered camera vision. Built for Smart Recycle Bin IoT deployments with GPS tracking, REST API, and optional GCP hardware control. Firebase has been removed from this branch.
 
-Firebase Database (only assigned user email can access database): https://console.firebase.google.com/u/0/project/cpc357-6876b/overview
+🚀 Prerequisites
 
-Deployed Camera URL: https://cpc357-6876b.web.app/
-
-## 🚀 Setup and Installation
-
-### Prerequisites
-- Node.js (v16 or higher)
-- npm (comes with Node.js)
+- Node.js v16+ (includes npm)
 - Git
+- MongoDB (local or Atlas)
 
-### Step 1: Clone the Repository
-```bash
-git clone -b camera https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357
-```
+1️⃣ Clone the Repository
+git clone https://github.com/Mavis-smile/CPC357-Assignment2.git
+cd CPC357-Assignment2
 
-If you already have the repository:
-```bash
+If you already have it:
+
 git pull origin main
-```
 
-### Step 2: Install Dependencies
-```bash
+2️⃣ Install Dependencies
 npm install
-```
 
-### Step 3: Configure Environment Variables
-Create a `.env.local` file in the project root directory:
-```bash
-# For Windows PowerShell
+3️⃣ Configure Environment Variables
+
+Create .env.local in the project root:
+
+# Windows PowerShell
 New-Item .env.local
-
-# For macOS/Linux
+# macOS/Linux
 touch .env.local
-```
 
-Add the following environment variables to `.env.local`:
+Paste below code into your .env.local and change the required credential accordingly
+# backend
+MONGO_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/
+DB_NAME=smartbin
+PORT=4000
+GCP_HARDWARE_WEBHOOK_URL=http://YOUR_GCP_VM_IP:5000/webhook/detection
+# Frontend
+VITE_API_BASE_URL=http://localhost:4000/api
 
-```env
-# MQTT Broker (WebSocket URL)
-# Replace with your GCP VM external IP
-VITE_MQTT_BROKER_URL=ws://<YOUR_GCP_VM_IP>:9001
 
-# MQTT Broker Secure (WebSocket Secure URL for HTTPS hosting)
-# Set this after configuring WSS on your broker
-VITE_MQTT_BROKER_URL_SECURE=wss://<YOUR_DOMAIN>
+Notes:
+Never commit .env.local to Git
+MONGO_URI can be MongoDB Atlas or local
 
-# Firebase Configuration
-# Get these values from Firebase Console > Project Settings > General > Your apps
-VITE_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
-VITE_FIREBASE_AUTH_DOMAIN=<YOUR_PROJECT_ID>.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=<YOUR_PROJECT_ID>
-VITE_FIREBASE_STORAGE_BUCKET=<YOUR_PROJECT_ID>.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=<YOUR_SENDER_ID>
-VITE_FIREBASE_APP_ID=<YOUR_APP_ID>
-VITE_FIREBASE_MEASUREMENT_ID=<YOUR_MEASUREMENT_ID>
-```
+4️⃣ Start the Backend
+npm run server         # regular
+npm run server:dev     # auto-reload (Node 18+)
 
-#### Required Keys (refer to project report for actual values):
-- **VITE_MQTT_BROKER_URL**: WebSocket URL for MQTT broker (e.g., `ws://34.63.50.190:9001`)
-- **VITE_MQTT_BROKER_URL_SECURE**: Secure WebSocket URL for production (e.g., `wss://cpc357.chickenkiller.com`)
-- **VITE_FIREBASE_API_KEY**: Firebase API key from project settings
-- **VITE_FIREBASE_AUTH_DOMAIN**: Firebase authentication domain
-- **VITE_FIREBASE_PROJECT_ID**: Your Firebase project ID
-- **VITE_FIREBASE_STORAGE_BUCKET**: Firebase storage bucket URL
-- **VITE_FIREBASE_MESSAGING_SENDER_ID**: Firebase messaging sender ID
-- **VITE_FIREBASE_APP_ID**: Firebase app ID
-- **VITE_FIREBASE_MEASUREMENT_ID**: Firebase Analytics measurement ID
+Test API health:
+curl http://localhost:4000/api/health
 
-> **Important:** All configuration values (IP addresses, domains, and Firebase credentials) are provided in the project report. Copy them exactly as shown.
-
-### Step 4: Run the Development Server
-```bash
+5️⃣ Start the Frontend using command below
 npm run dev
-```
 
-The application will start at `http://localhost:5173` (or another available port).
+App runs at http://localhost:5173
+Grant permissions in-browser:
+Camera for waste detection
+Location for GPS tracking
 
-### Step 5: Grant Permissions
-When you open the app in your browser, grant the following permissions when prompted:
-- **Camera access** - Required for waste detection
-- **Location access** - Required for GPS tracking of bin location
+6️⃣ Technology Stack
+Category	Technology
+Framework	React 18 + TypeScript + Vite
+Styling	Tailwind CSS v3
+AI Model	TensorFlow.js COCO-SSD (MobileNet v2)
+Camera	react-webcam + HTML5 Canvas
+Data pipeline	REST API + optional GCP Webhook
+Geolocation	Browser Geolocation API
 
----
+Detection: Paper, Aluminium, Plastic
 
-## 🧠 Technology Stack
+Real-time ~2 FPS
 
-| Category | Technology |
-|----------|-----------|
-| **Framework** | React 18 + TypeScript + Vite |
-| **Styling** | Tailwind CSS v3 |
-| **AI Model** | TensorFlow.js COCO-SSD (MobileNet v2) |
-| **Camera** | react-webcam with HTML5 Canvas |
-| **Database** | Firebase Firestore |
-| **Geolocation** | Browser Geolocation API |
+Smart filtering to exclude people/hands
 
-### Detection Model Details
-- **Model:** COCO-SSD pre-trained on 80 object classes
-- **Performance:** Real-time detection at ~2 FPS
-- **Smart Filtering:** Automatically exclude hand/person detections when waste items are present
-- **Categories:** Paper, Aluminium, Plastic
-
----
-
-## 📊 Firestore Database Structure
-
-### Collection: `detections`
-Stores every detected waste item event:
-```javascript
-{
-  documentId: "BIN001_2025-11-26T10-30-45_bottle",  // Custom ID
-  binId: "BIN001",
-  itemClass: "bottle",
-  category: "recyclable",
-  confidence: 87,                    // 0-100
-  timestamp: ServerTimestamp,        // Firestore server time
-  detectedAt: Date                   // Client capture time
-}
-```
-
-### Collection: `bins`
-One document per physical bin with metadata and location:
-```javascript
-{
-  binId: "BIN001",                  // Document ID
-  latitude: 40.7128,
-  longitude: -74.0060,
-  accuracy: 12,                      // GPS accuracy in meters
-  method: "single",                  // "single" or "watch"
-  address: "350 5th Ave, New York",  // Optional (needs Maps API key)
-  updatedAt: ServerTimestamp
-}
-```
-
----
-
-## 📁 Project Structure
-
-```
+7️⃣ Project Structure
 Project-CPC357/
 ├── src/
-│   ├── App.tsx              # Root component
-│   ├── TrashDetection.tsx   # Main detection UI & logic
-│   ├── binLocation.ts       # Geolocation utilities
-│   ├── firebase.ts          # Firebase configuration
-│   ├── main.tsx             # React entry point
-│   └── index.css            # Global styles + Tailwind
+│   ├── App.tsx
+│   ├── TrashDetection.tsx
+│   ├── binLocation.ts
+│   ├── apiClient.ts
+│   ├── mqttClient.ts  # deprecated
+│   ├── main.tsx
+│   └── index.css
 ├── public/
-│   └── vite.svg
-├── .env.local               # Environment variables (create manually)
+├── server.js
+├── .env.local
+├── gcp_webhook_server.py
 ├── package.json
 ├── vite.config.ts
 ├── tailwind.config.js
 └── README.md
-```
 
----
+8️⃣ Backend API Endpoints
 
-## ⚙️ Configuration & Customization
+## Health Check
+GET /api/health – Server + DB status
 
-### Change Bin ID
-Edit `src/TrashDetection.tsx`:
-```typescript
-const [binId] = useState('BIN001');  // Change to BIN002, BIN003, etc.
-```
+## Detections
+POST /api/detections – Create detection
+GET /api/detections?binId=BIN001&category=plastic&limit=100 – Retrieve
 
-### Add Continuous Location Tracking
-Implement `watchPosition` in `src/binLocation.ts` for real-time bin movement tracking.
+## Bins
+PUT /api/bins/:binId/location – Update location
+GET /api/bins – All bins
+GET /api/bins/:binId – Specific bin
 
----
+9️⃣ MongoDB Structure
 
-## 🛠️ Development Commands
+detections:
+  {
+    "_id": "BIN001_2026-01-08T10-30-45_bottle",
+    "binId": "BIN001",
+    "itemClass": "bottle",
+    "category": "aluminium",
+    "confidence": 87,
+    "detectedAt": "2026-01-08T10:30:45.000Z",
+    "address": "123 Main St",
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "createdAt": "2026-01-08T10:30:45.123Z"
+  }
 
-| Command | Description |
-|---------|-------------|
-| `npm install` | Install dependencies |
-| `npm run dev` | Start development server |
 
----
+bins:
+  {
+    "binId": "BIN001",
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "accuracy": 12,
+    "method": "single",
+    "address": "123 Main St",
+    "createdAt": "2026-01-08T10:00:00.000Z",
+    "updatedAt": "2026-01-08T10:30:45.000Z"
+  }
+
+🔧 Configuration & Customization
+Change Bin ID: src/TrashDetection.tsx → const [binId] = useState('BIN001')
+Continuous location tracking: use watchPosition in src/binLocation.ts
+
+🛠️ Development Commands
+Command	Description
+npm install	Install dependencies
+npm run dev	Start frontend
+npm run build	Build frontend
+npm run server	Start backend
+npm run server:dev	Backend with auto-reload
+
+🔧 Run GCP Hardware Webhook
+Prerequisites
+- GCP VM with external IP (e.g., 34.63.218.151)
+- Python 3 installed
+- Port 5000 open in firewall
+
+Step 1: Deploy Webhook Server
+- SSH via browser or CLI
+- Install Python & Flask:
+
+sudo apt update
+sudo apt install python3 python3-pip -y
+pip3 install flask
+
+Upload gcp_webhook_server.py to VM home folder
+Run:
+cd ~
+python3 gcp_webhook_server.py
+# or background
+nohup python3 gcp_webhook_server.py > webhook.log 2>&1 &
+
+
+- Open firewall port 5000 (UI or CLI)
+
+Step 2: Configure Backend
+
+- Update .env.local:
+GCP_HARDWARE_WEBHOOK_URL=http://YOUR_GCP_VM_IP:5000/webhook/detection
+
+Step 3: Test Webhook
+- Health check:
+curl http://YOUR_GCP_VM_IP:5000/health
+
+
+- Test detection endpoint:
+curl -X POST http://YOUR_GCP_VM_IP:5000/webhook/detection \
+  -H "Content-Type: application/json" \
+  -d '{
+    "binId": "BIN001",
+    "category": "plastic",
+    "itemClass": "bottle",
+    "confidence": 85,
+    "timestamp": 1704672000000
+  }'
+
+
+Optional: HTTPS (Production)
+
+Use Certbot + domain
+
+Update Flask SSL context
+
+Update GCP_HARDWARE_WEBHOOK_URL to https://yourdomain.com/webhook/detection
