@@ -1,160 +1,135 @@
-# THIS BRANCH IS FOR DASHBOARD ONLY 🗑️
+# Dashboard (React + Express + MongoDB)
 
-Web dashboard for real-time monitoring, analytics, and remote control of IoT smart bins. Visualizes bin locations, fill levels, recent detections, and allows officers to send remote commands (e.g., close lid, mark emptied).
+Web dashboard for real-time monitoring and analytics of IoT smart bins. Displays bin locations, fill levels, recent detections, and supports simple control actions.
 
-Firebase Database (only assigned user email can access database): https://console.firebase.google.com/u/0/project/cpc357-6876b/overview
+Live URL (Netlify): https://smart-bin-cpc357.netlify.app/
 
-Deployed Dashboard URL: https://project-cpc-357.vercel.app/
-
-## 🚀 Setup and Installation
+## 🚀 Setup (Local Development)
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- npm (comes with Node.js)
-- Git
+- Node.js 18+
+- npm
+- MongoDB Atlas account (or reachable MongoDB instance)
 
-### Step 1: Clone the Repository
+### 1) Clone and install
 ```bash
-git clone -b dashboard https://github.com/andy-clos/Project-CPC357.git
-cd Project-CPC357
-```
-
-If you already have the repository:
-```bash
-git pull origin main
-```
-
-### Step 2: Install Dependencies
-```bash
+git clone -b dashboard https://github.com/Mavis-smile/CPC357-Assignment2.git
+cd CPC357-Assignment2/dashboard/CPC357-Assignment2
 npm install
 ```
 
-### Step 3: Configure Environment Variables
-Create a `.env.local` file in the project root directory:
-```bash
-# For Windows PowerShell
-New-Item .env.local
-
-# For macOS/Linux
-touch .env.local
-```
-
-Add the following environment variables to `.env.local`:
-
+### 2) Environment variables (.env.local)
+Create a `.env.local` file in this folder with:
 ```env
-# Google Maps API Key (Required for map display and address lookup)
+# Backend (Express)
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/
+MONGODB_DB_NAME=smartbin
+PORT=3001
+
+# Frontend (Vite)
+VITE_API_URL=http://localhost:3001/api
 VITE_MAPS_API_KEY=<YOUR_GOOGLE_MAPS_API_KEY>
-
-# Firebase Configuration
-# Get these values from Firebase Console > Project Settings > General > Your apps
-VITE_FIREBASE_API_KEY=<YOUR_FIREBASE_API_KEY>
-VITE_FIREBASE_AUTH_DOMAIN=<YOUR_PROJECT_ID>.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=<YOUR_PROJECT_ID>
-VITE_FIREBASE_STORAGE_BUCKET=<YOUR_PROJECT_ID>.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=<YOUR_SENDER_ID>
-VITE_FIREBASE_APP_ID=<YOUR_APP_ID>
-VITE_FIREBASE_MEASUREMENT_ID=<YOUR_MEASUREMENT_ID>
 ```
 
-#### Required Keys (refer to project report for actual values):
-- **VITE_MAPS_API_KEY**: Google Maps API key for map display and geocoding
-- **VITE_FIREBASE_API_KEY**: Firebase API key from project settings
-- **VITE_FIREBASE_AUTH_DOMAIN**: Firebase authentication domain
-- **VITE_FIREBASE_PROJECT_ID**: Your Firebase project ID
-- **VITE_FIREBASE_STORAGE_BUCKET**: Firebase storage bucket URL
-- **VITE_FIREBASE_MESSAGING_SENDER_ID**: Firebase messaging sender ID
-- **VITE_FIREBASE_APP_ID**: Firebase app ID
-- **VITE_FIREBASE_MEASUREMENT_ID**: Firebase Analytics measurement ID
-
-> **Important:** All configuration values (Google Maps API key and Firebase credentials) are provided in the project report. Copy them exactly as shown.
-
-### Step 4: Run the Development Server
+### 3) Run locally
 ```bash
-npm run dev
+# Start both frontend (Vite) and backend (Express)
+
+
+# Or run separately
+npm run server:dev  # backend on http://localhost:3001
+npm run dev         # frontend on http://localhost:5173
 ```
 
-The application will start at `http://localhost:5173` (or another available port).
+---
 
-### Step 5: Access the Dashboard
-Open the app in your browser. No camera or location permissions are needed for dashboard use.
+## 🧰 Project Structure
+
+```
+dashboard/CPC357-Assignment2/
+├── public/
+├── server/               # Express API + webhooks for IoT updates
+│   ├── db.ts
+│   └── index.ts
+├── src/                  # React + Vite frontend
+│   ├── App.tsx
+│   ├── BinMap.tsx
+│   ├── api.ts
+│   └── main.tsx
+├── .env.local            # Local env (not committed)
+├── netlify.toml          # Netlify build config
+├── package.json
+├── tailwind.config.js
+├── tsconfig.json
+└── vite.config.ts
+```
+
+---
+
+## 🌐 Deployment (Netlify + GCP Backend)
+
+The frontend is deployed on Netlify. Environment variables must be set in Netlify because `.env.local` is not used during build.
+
+### Netlify build settings
+- Base directory: `dashboard/CPC357-Assignment2`
+- Build command: `npm run build`
+- Publish directory: `dist`
+
+### Netlify environment variables
+- `VITE_MAPS_API_KEY` = your Google Maps API key
+- `VITE_API_URL` = your backend API URL (e.g., `https://<your-cloud-run-url>/api`)
+
+After adding env vars, trigger: Deploys → “Clear cache and deploy site”.
+
+### Backend deployment (GCP recommended)
+Deploy the Express API (in `server/`) to Google Cloud Run/App Engine/VM. Make sure CORS allows your Netlify domain.
+
+Example CORS in `server/index.ts`:
+```ts
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://smart-bin-cpc357.netlify.app'
+  ]
+}));
+```
 
 ---
 
 ## 🧠 Technology Stack
 
 | Category | Technology |
-|----------|-----------|
-| **Framework** | React 18 + TypeScript + Vite |
-| **Styling** | Tailwind CSS v3 |
-| **Database** | Firebase Firestore |
-| **Map** | Google Maps API |
-
-
-### Dashboard Features
-- Real-time bin status and fill level monitoring
-- Interactive map showing selected bin location
-- Analytics: 24h detection counts, waste category breakdown, top bins
-- Remote control: Close/open lid, mark emptied, flag overflow
-- Mobile-friendly, responsive UI
+|----------|------------|
+| Frontend | React 18, TypeScript, Vite |
+| Backend  | Express.js (TypeScript) |
+| Database | MongoDB Atlas |
+| Styling  | Tailwind CSS |
+| Maps     | Google Maps API |
+| HTTP     | Axios |
 
 ---
 
-## 📊 Firestore Database Structure
+## 🔌 API Overview (server)
 
-
-### Collection: `detections`
-Stores every detected waste item event (pushed by camera system):
-```
-{
-  binId: "BIN001",
-  itemClass: "bottle",
-  category: "recyclable",
-  confidence: 87,                    // 0-100
-  timestamp: ServerTimestamp,        // Firestore server time
-  detectedAt: Date                   // Client capture time
-}
-```
-
-### Collection: `bins`
-One document per physical bin with metadata and location:
-```
-{
-  binId: "BIN001",                  // Document ID
-  latitude: 3.139,
-  longitude: 101.6869,
-  address: "Somewhere, KL",           // Optional (needs Maps API key)
-  fillLevel: 75,                      // Estimated fill %
-  updatedAt: ServerTimestamp
-}
-```
+- `GET /api/health` – health check
+- `GET /api/detections?limit=200` – recent detections
+- `GET /api/bins` – all bins
+- `GET /api/bins/:binId` – single bin
+- `POST /api/commands` – queue command for bin
+- `PATCH /api/bins/:binId` – update bin
+- Webhooks for IoT:
+  - `POST /api/webhook/detection` – camera detection payload
+  - `POST /api/webhook/bin-update` – sensor data/update
 
 ---
 
-
-## 📁 Project Structure (Dashboard Only)
-
-```
-Project-CPC357_dashboard/
-├── src/
-│   ├── App.tsx            # Dashboard root component
-│   ├── BinMap.tsx         # Map visualization for selected bin
-│   ├── firebase.ts        # Firebase configuration
-│   ├── main.tsx           # React entry point
-│   └── index.css          # Global styles + Tailwind
-├── public/
-├── .env.local             # Environment variables (create manually)
-├── package.json
-├── vite.config.ts
-├── tailwind.config.js
-└── README.md
-```
----
-
-## 🛠️ Development Commands
+## 🛠️ Useful Commands
 
 | Command | Description |
 |---------|-------------|
 | `npm install` | Install dependencies |
-| `npm run dev` | Start development server |
-
----
+| `npm start` | Start frontend + backend concurrently |
+| `npm run dev` | Frontend dev server (Vite) |
+| `npm run server:dev` | Backend dev server (nodemon + tsx) |
+| `npm run build` | Build frontend for production |
+| `npm run preview` | Preview built frontend locally |
