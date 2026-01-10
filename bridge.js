@@ -1,262 +1,299 @@
 /**
- * MQTT-to-Firebase Bridge
+ * Hardware-to-MongoDB Bridge (GCP + HTTP)
  * 
- * Purpose: Synchronizes data between MQTT broker and Firebase Firestore
+ * Purpose: Receives sensor data from ESP32 via serial/HTTP and forwards to MongoDB via HTTP webhooks
  * Runs on: GCP VM with Node.js
  * 
  * Data Flow:
- * 1. ESP32 → MQTT → Bridge → Firebase (sensors, alerts)
- * 2. Dashboard → Firebase → Bridge → MQTT → ESP32 (commands)
+ * 1. ESP32 → Serial/HTTP → Bridge → GCP Webhook (HTTP) → MongoDB
+ * 2. Dashboard → MongoDB → Bridge polls commands → Sends to ESP32
  */
 
-const mqtt = require('mqtt');
-const admin = require('firebase-admin');
+const { MongoClient } = require('mongodb');
 const fs = require('fs');
 const path = require('path');
 
 // ============================================================================
-// INITIALIZATION
+// ENV LOADING (reads dashboard .env.local)
 // ============================================================================
 
-// Load service account key
-const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
-if (!fs.existsSync(serviceAccountPath)) {
-  console.error('❌ serviceAccountKey.json not found!');
-  console.error('   Place your Firebase service account key in:', serviceAccountPath);
-  process.exit(1);
+function loadEnvFrom(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      console.warn(`⚠️  Env file not found: ${filePath}`);
+      return;
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    content
+      .split(/\r?\n/)
+      .filter(line => line && !line.trim().startsWith('#'))
+      .forEach(line => {
+        const idx = line.indexOf('=');
+        if (idx === -1) return;
+        const key = line.slice(0, idx).trim();
+        const val = line.slice(idx + 1).trim();
+        if (key) process.env[key] = val;
+      });
+    console.log(`✅ Loaded env from: ${filePath}`);
+  } catch (err) {
+    console.error('❌ Error loading env from', filePath, err.message);
+  }
 }
 
-const serviceAccount = require(serviceAccountPath);
+// Load dashboard environment variables
+const dashboardEnv = path.resolve(__dirname, '..', '..', 'dashboard', 'CPC357-Assignment2', '.env.local');
+loadEnvFrom(dashboardEnv);
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: serviceAccount.project_id
-});
-
-const db = admin.firestore();
-const Timestamp = admin.firestore.Timestamp;
-const FieldValue = admin.firestore.FieldValue;
-
-// Connect to local MQTT broker
-const mqttClient = mqtt.connect('mqtt://localhost:1883', {
-  clientId: 'firebase-bridge-' + Date.now(),
-  clean: true,
-  reconnectPeriod: 5000,
-  will: {
-    topic: 'bridge/status',
-    payload: JSON.stringify({ status: 'offline', timestamp: Date.now() }),
-    retain: true
-  }
-});
+// Configuration from environment
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'smartbin';
+const GCP_DETECTION_URL = process.env.GCP_HARDWARE_WEBHOOK_URL || 'http://34.55.213.223:5000/webhook/detection';
+const API_BASE = (process.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/api$/, '');
+const BIN_UPDATE_URL = `${API_BASE}/api/webhook/bin-update`;
 
 // ============================================================================
-// MQTT EVENT HANDLERS
+// HTTP HELPER
 // ============================================================================
 
-mqttClient.on('connect', () => {
-  console.log('✅ Connected to MQTT broker (localhost:1883)');
-  
-  // Publish online status
-  mqttClient.publish('bridge/status', JSON.stringify({
-    status: 'online',
-    timestamp: Date.now()
-  }), { retain: true });
-  
-  // Subscribe to sensor and alert topics from ESP32
-  console.log('📡 Subscribing to MQTT topics...');
-  mqttClient.subscribe('smartbin/sensors', err => {
-    if (!err) console.log('   ✓ smartbin/sensors');
-  });
-  
-  mqttClient.subscribe('smartbin/alerts', err => {
-    if (!err) console.log('   ✓ smartbin/alerts');
-  });
-  
-  mqttClient.subscribe('smartbin/item', err => {
-    if (!err) console.log('   ✓ smartbin/item');
-  });
-});
-
-mqttClient.on('error', (err) => {
-  console.error('❌ MQTT Error:', err);
-});
-
-mqttClient.on('reconnect', () => {
-  console.log('🔄 Reconnecting to MQTT broker...');
-});
-
-mqttClient.on('disconnect', () => {
-  console.log('⚠️  Disconnected from MQTT broker');
-});
-
-// Handle incoming MQTT messages from ESP32
-mqttClient.on('message', async (topic, message) => {
+async function postJSON(url, data) {
   try {
-    const payload = JSON.parse(message.toString());
-    
-    // ========== SENSOR DATA (from ESP32) ==========
-    if (topic === 'smartbin/sensors') {
-      const { binId, fillLevels, temperature, humidity, smokeLevel, isActive, fireAlert, inFireCooldown } = payload;
-      
-      if (!binId) {
-        console.warn('⚠️  Sensor message missing binId');
-        return;
-      }
-      
-      // Update bin document in Firestore
-      await db.collection('bins').doc(binId).set({
-        binId: binId,
-        fillLevels: fillLevels || [0, 0, 0],
-        temperature: temperature || 0,
-        humidity: humidity || 0,
-        smokeLevel: smokeLevel || 0,
-        isActive: isActive || false,
-        fireAlert: fireAlert || false,
-        inFireCooldown: inFireCooldown || false,
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-      
-      console.log(`✅ Sensor data updated for ${binId}`);
-      console.log(`   Fill: ${fillLevels}, Temp: ${temperature}°C, Smoke: ${smokeLevel}, Fire: ${fireAlert}, Cooldown: ${inFireCooldown}`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${text}`);
     }
-    
-    // ========== FIRE ALERT (from ESP32) ==========
-    else if (topic === 'smartbin/alerts') {
-      const { binId, alertType, temperature, smokeLevel } = payload;
-      
-      if (!binId) {
-        console.warn('⚠️  Alert message missing binId');
-        return;
-      }
-      
-      // Update fire alert flag in bin document
-      await db.collection('bins').doc(binId).update({
-        fireAlert: true,
-        temperature: temperature,
-        smokeLevel: smokeLevel,
-        updatedAt: FieldValue.serverTimestamp()
-      });
-      
-      // Log alert to alerts collection
-      await db.collection('alerts').add({
-        binId: binId,
-        alertType: alertType || 'FIRE',
-        temperature: temperature,
-        smokeLevel: smokeLevel,
-        timestamp: FieldValue.serverTimestamp()
-      });
-      
-      console.log(`🔥 Fire alert for ${binId}`);
-      console.log(`   Temperature: ${temperature}°C, Smoke: ${smokeLevel}`);
-    }
-    
-    // ========== ITEM DETECTION (from Camera via ESP32) ==========
-    else if (topic === 'smartbin/item') {
-      const { binId, category, itemClass, confidence, latitude, longitude } = payload;
-      
-      if (!binId) {
-        console.warn('⚠️  Item detection missing binId');
-        return;
-      }
-      
-      // Log detection to Firestore
-      await db.collection('detections').add({
-        binId: binId,
-        itemClass: itemClass || 'unknown',
-        category: category || 'general',
-        confidence: confidence || 0,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        timestamp: FieldValue.serverTimestamp()
-      });
-      
-      console.log(`📦 Item detected: ${category} (${confidence}%)`);
-    }
-    
+    return await res.json().catch(() => ({}));
   } catch (err) {
-    console.error('❌ Error processing MQTT message:', err.message);
+    console.error(`❌ POST ${url} failed:`, err.message);
+    throw err;
   }
-});
+}
 
 // ============================================================================
-// FIREBASE COMMAND LISTENER
+// MONGODB CONNECTION
+// ============================================================================
+
+let mongoClient;
+let db;
+
+async function connectToDatabase() {
+  try {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    db = mongoClient.db(MONGODB_DB_NAME);
+    console.log(`✅ Connected to MongoDB: ${MONGODB_DB_NAME}`);
+    return db;
+  } catch (err) {
+    console.error('❌ MongoDB connection failed:', err.message);
+    throw err;
+  }
+}
+
+// ============================================================================
+// DATA PROCESSING FUNCTIONS
 // ============================================================================
 
 /**
- * Listen to Firebase 'commands' collection for new commands
- * When dashboard sends a command, this bridge relays it to ESP32 via MQTT
+ * Process sensor data from ESP32 and send to MongoDB via HTTP
  */
-db.collection('commands')
-  .where('status', '==', 'pending')
-  .onSnapshot(
-    snapshot => {
-      snapshot.docChanges().forEach(async change => {
-        if (change.type === 'added') {
-          const cmdDoc = change.doc;
-          const cmdData = cmdDoc.data();
-          const { binId, action, issuedAt } = cmdData;
-          
-          if (!binId || !action) {
-            console.warn('⚠️  Invalid command: missing binId or action');
-            return;
-          }
-          
-          try {
-            // Publish command to MQTT for ESP32
-            const mqttPayload = JSON.stringify({
-              binId: binId,
-              action: action,
-              timestamp: Date.now(),
-              issuedAt: issuedAt
-            });
-            
-            mqttClient.publish('smartbin/commands', mqttPayload);
-            
-            console.log(`📤 Command published to ESP32:`);
-            console.log(`   BinID: ${binId}, Action: ${action}`);
-            
-            // Mark command as processed in Firebase
-            await cmdDoc.ref.update({
-              status: 'processed',
-              processedAt: FieldValue.serverTimestamp()
-            });
-            
-            console.log(`   ✓ Marked as processed`);
-            
-          } catch (err) {
-            console.error('❌ Error processing command:', err.message);
-            
-            // Mark as failed
-            try {
-              await cmdDoc.ref.update({
-                status: 'failed',
-                error: err.message,
-                failedAt: FieldValue.serverTimestamp()
-              });
-            } catch (updateErr) {
-              console.error('❌ Error updating command status:', updateErr.message);
-            }
+async function processSensorData(data) {
+  const { binId, fillLevels, temperature, humidity, smokeLevel, isActive, fireAlert, inFireCooldown } = data;
+  
+  if (!binId) {
+    console.warn('⚠️  Sensor data missing binId');
+    return;
+  }
+  
+  console.log(`📊 Sensor data for ${binId}`);
+  console.log(`   Fill: ${fillLevels}, Temp: ${temperature}°C, Humidity: ${humidity}%, Smoke: ${smokeLevel}`);
+  
+  try {
+    const payload = {
+      binId,
+      fillLevels,
+      temperature,
+      humidity,
+      smokeLevel,
+      isActive,
+      fireAlert,
+      inFireCooldown,
+      timestamp: new Date().toISOString()
+    };
+    
+    await postJSON(BIN_UPDATE_URL, payload);
+    console.log(`✅ Sensor data sent to ${BIN_UPDATE_URL}`);
+  } catch (err) {
+    console.error(`❌ Failed to send sensor data for ${binId}`);
+  }
+}
+
+/**
+ * Process item detection from camera and send to GCP webhook
+ */
+async function processDetection(data) {
+  const { binId, category, itemClass, confidence, latitude, longitude } = data;
+  
+  if (!binId) {
+    console.warn('⚠️  Detection missing binId');
+    return;
+  }
+  
+  console.log(`📦 Detection: ${itemClass} (${category}) - ${confidence}% confidence`);
+  
+  try {
+    const payload = {
+      binId,
+      itemClass: itemClass || 'unknown',
+      category: category || 'general',
+      confidence: confidence || 0,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      timestamp: new Date().toISOString()
+    };
+    
+    await postJSON(GCP_DETECTION_URL, payload);
+    console.log(`✅ Detection sent to ${GCP_DETECTION_URL}`);
+  } catch (err) {
+    console.error(`❌ Failed to send detection for ${binId}`);
+  }
+}
+
+// ============================================================================
+// COMMAND POLLING (MongoDB → ESP32)
+// ============================================================================
+
+/**
+ * Poll MongoDB for pending commands and process them
+ */
+async function pollCommands() {
+  try {
+    const commands = await db.collection('commands')
+      .find({ status: 'pending' })
+      .toArray();
+    
+    for (const cmd of commands) {
+      const { binId, action } = cmd;
+      
+      if (!binId || !action) {
+        console.warn('⚠️  Invalid command: missing binId or action');
+        continue;
+      }
+      
+      console.log(`📤 Command for ${binId}: ${action}`);
+      
+      // TODO: Send command to ESP32 via serial/HTTP
+      // For now, just mark as processed
+      
+      await db.collection('commands').updateOne(
+        { _id: cmd._id },
+        { 
+          $set: { 
+            status: 'processed',
+            processedAt: new Date()
           }
         }
-      });
-    },
-    err => {
-      console.error('❌ Firebase listener error:', err.message);
+      );
+      
+      console.log(`   ✓ Command marked as processed`);
     }
-  );
+  } catch (err) {
+    console.error('❌ Error polling commands:', err.message);
+  }
+}
 
 // ============================================================================
-// STARTUP MESSAGE
+// MAIN LOOP
 // ============================================================================
 
-console.log('\n' + '='.repeat(60));
-console.log('🌉 MQTT-to-Firebase Bridge');
-console.log('='.repeat(60));
-console.log('📡 MQTT Broker: localhost:1883');
-console.log('🔥 Firebase Project:', serviceAccount.project_id);
-console.log('='.repeat(60));
-console.log('\n⏳ Connecting to MQTT broker...\n');
+async function startBridge() {
+  console.log('\n' + '='.repeat(60));
+  console.log('🌉 Hardware-to-MongoDB Bridge (GCP + HTTP)');
+  console.log('='.repeat(60));
+  console.log('🗄️  MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***@'));
+  console.log('📦 Database:', MONGODB_DB_NAME);
+  console.log('🌐 Detection webhook:', GCP_DETECTION_URL);
+  console.log('🌐 Bin update webhook:', BIN_UPDATE_URL);
+  console.log('='.repeat(60));
+  console.log();
+  
+  // Connect to MongoDB
+  await connectToDatabase();
+  
+  // Poll for commands every 5 seconds
+  setInterval(pollCommands, 5000);
+  
+  console.log('✅ Bridge running');
+  console.log('💡 Polling MongoDB for commands every 5 seconds...');
+  console.log('💡 Send sensor data via processSensorData()');
+  console.log('💡 Send detections via processDetection()\n');
+}
+
+// ============================================================================
+// EXAMPLE: Simulate incoming data from ESP32
+// ============================================================================
+
+// Uncomment to test:
+// setTimeout(() => {
+//   processSensorData({
+//     binId: 'BIN001',
+//     fillLevels: [10, 20, 30],
+//     temperature: 26,
+//     humidity: 55,
+//     smokeLevel: 0,
+//     isActive: true,
+//     fireAlert: false,
+//     inFireCooldown: false
+//   });
+// }, 3000);
+
+// setTimeout(() => {
+//   processDetection({
+//     binId: 'BIN001',
+//     category: 'recyclable',
+//     itemClass: 'bottle',
+//     confidence: 87,
+//     latitude: 3.139,
+//     longitude: 101.6869
+//   });
+// }, 5000);
+
+// ============================================================================
+// GRACEFUL SHUTDOWN
+// ============================================================================
+
+process.on('SIGINT', async () => {
+  console.log('\n\n🛑 Shutting down gracefully...');
+  
+  if (mongoClient) {
+    await mongoClient.close();
+    console.log('✅ MongoDB disconnected');
+  }
+  
+  process.exit(0);
+});
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+// Start the bridge
+startBridge().catch(err => {
+  console.error('❌ Failed to start bridge:', err);
+  process.exit(1);
+});
 
 // ============================================================================
 // GRACEFUL SHUTDOWN

@@ -1,6 +1,6 @@
 # THIS BRANCH IS FOR HARDWARE ONLY 🔧
 
-Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using Maker Feather AIoT S3 microcontroller with MQTT communication.
+Smart Recycle Bin IoT hardware system with automated sorting, environmental monitoring, fire detection, and remote control capabilities. Built using Maker Feather AIoT S3 microcontroller with HTTP communication to GCP and MongoDB.
 
 ## 🧠 System Overview
 
@@ -12,26 +12,20 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
 | **Bin Sorting** | Paper, Plastic, Aluminium |
 | **Fill Level Monitoring** | 3 independent IR sensors (one per bin compartment) |
 | **Fire Safety** | MQ-2 smoke sensor + DHT11 sensor + 10-min cooldown |
-| **Remote Control** | Dashboard commands through MQTT |
-| **Real-time Sync** | Firebase Firestore with MQTT bridge |
+| **Remote Control** | Dashboard commands through MongoDB polling |
+| **Real-time Sync** | MongoDB Atlas with HTTP webhooks |
 | **GPS Tracking** | Location-based detection history |
 
----
-
----
-
-## System Architecture
-
-### High-Level Overview
+## System Architecture (Updated)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      SMARTPHONE (Camera Device)                     │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │  Camera Web UI (React App - Project-CPC357_cam)                │ │
-│  │  - Object Detection Model (TensorFlow.js/YOLO)                 │ │
+│  │  Camera Web UI (React App)                                     │ │
+│  │  - Object Detection Model (TensorFlow.js)                      │ │
 │  │  - GPS Location Capture                                        │ │
-│  │  - MQTT Client (publishes to: smartbin/item)                   │ │
+│  │  - HTTP POST to GCP Webhook                                    │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │ WiFi/4G
@@ -39,15 +33,23 @@ Smart Recycle Bin IoT hardware system with automated sorting, environmental moni
                 ┌───────────────────────────────┐
                 │   GCP VM Instance (Cloud)     │
                 │  ┌─────────────────────────┐  │
-                │  │  Mosquitto MQTT Broker  │  │
-                │  │  Port: 1883, 9001(WS)   │  │
+                │  │  Python Webhook Server  │  │
+                │  │  Port: 5000 (Flask)     │  │
                 │  └─────────────────────────┘  │
                 │  ┌─────────────────────────┐  │
-                │  │  MQTT-Firebase Bridge   │  │
-                │  │  (Node.js Script)       │  │
+                │  │  Hardware Bridge        │  │
+                │  │  (Node.js - MongoDB)    │  │
                 │  └─────────────────────────┘  │
                 └───┬───────────────────┬───────┘
                     │                   │
+                    ▼                   ▼
+            ┌──────────────┐    ┌──────────────┐
+            │ MongoDB      │    │ Express API  │
+            │ Atlas        │    │ (Dashboard)  │
+            └──────────────┘    └──────────────┘
+```
+
+---
         ┌───────────┘                   └──────────┐
         │ WiFi                                WiFi │
         ▼                                          ▼
