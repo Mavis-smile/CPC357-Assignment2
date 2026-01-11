@@ -18,6 +18,22 @@
  * Backend → MongoDB (stores detections)
  * Backend → Webhook (triggers servo/hardware)
  * Hardware Sensors → HTTP POST → Backend → Dashboard
+ */
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <DHT.h>
+#include <ESP32Servo.h>
+#include <ArduinoJson.h>
+
+// ==================== PIN DEFINITIONS ====================
+// Infrared Sensors (Waste level detection) - 3 active (paper, plastic, aluminium)
+#define IR_PAPER_PIN      6   // GPIO6 (IR1)
+#define IR_PLASTIC_PIN    4   // GPIO4 (IR2)
+#define IR_ALUMINIUM_PIN  7   // GPIO7 (IR3)
+
+// PIR Motion Sensor (Digital)
+#define PIR_PIN           15  // GPIO15
 
 // MQ-2 Smoke Sensor (Analog) - A0
 #define SMOKE_PIN         10  // GPIO10 (A0/D10)
