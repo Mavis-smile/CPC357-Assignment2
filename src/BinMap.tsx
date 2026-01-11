@@ -1,9 +1,6 @@
 import { GoogleMap, LoadScript } from '@react-google-maps/api'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 
-// No libraries needed for standard Marker
-const GOOGLE_MAPS_LIBRARIES: never[] = []
-
 type BinDoc = {
   id: string
   binId: string
