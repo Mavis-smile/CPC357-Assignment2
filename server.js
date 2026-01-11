@@ -261,6 +261,50 @@ app.get('/api/bins/:binId', async (req, res) => {
   }
 });
 
+// PATCH /api/bins/:binId - Update bin sensor data from hardware
+app.patch('/api/bins/:binId', async (req, res) => {
+  try {
+    const { binId } = req.params;
+    const { fillLevels, temperature, humidity, smokeLevel, fireAlert, isActive } = req.body;
+
+    const updateData = {
+      updatedAt: new Date()
+    };
+
+    // Only update fields that are provided
+    if (fillLevels !== undefined) updateData.fillLevels = fillLevels;
+    if (temperature !== undefined) updateData.temperature = temperature;
+    if (humidity !== undefined) updateData.humidity = humidity;
+    if (smokeLevel !== undefined) updateData.smokeLevel = smokeLevel;
+    if (fireAlert !== undefined) updateData.fireAlert = fireAlert;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const result = await db.collection('bins').updateOne(
+      { binId },
+      { 
+        $set: updateData,
+        $setOnInsert: { createdAt: new Date(), binId }
+      },
+      { upsert: true }
+    );
+
+    console.log(`✅ Bin ${binId} sensors updated:`, updateData);
+
+    res.json({ 
+      success: true, 
+      binId,
+      updated: result.modifiedCount > 0 || result.upsertedCount > 0,
+      message: 'Bin data updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating bin:', error);
+    res.status(500).json({ 
+      error: 'Failed to update bin',
+      message: error.message 
+    });
+  }
+});
+
 // Start server
 async function startServer() {
   await connectDB();
