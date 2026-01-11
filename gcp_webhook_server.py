@@ -66,7 +66,9 @@ def receive_detection():
                     'message': f'Bin {bin_id} not found in database'
                 }), 200
             
-            bin_data = bin_response.json()
+            response_data = bin_response.json()
+            # Handle both wrapped response {"bin": {...}} and direct response
+            bin_data = response_data.get('bin') if 'bin' in response_data else response_data
             esp32_ip = bin_data.get('localIP')
             
             if not esp32_ip:
