@@ -14,25 +14,10 @@
  * - Smartphone (Camera web UI for object detection & GPS location)
  * 
  * Communication Flow:
- * Camera Web (Smartphone) → MQTT → MCU (item detection for servo)
- * MCU → MQTT → GCP VM → Firebase (sensor data + GPS from phone)
- * Dashboard Web → Firebase → MQTT → MCU (remote commands)
- */
-
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <DHT.h>
-#include <ESP32Servo.h>
-#include <ArduinoJson.h>
-
-// ==================== PIN DEFINITIONS ====================
-// Infrared Sensors (Waste level detection) - 3 active (paper, plastic, aluminium)
-#define IR_PAPER_PIN      6   // GPIO6 (IR1)
-#define IR_PLASTIC_PIN    4   // GPIO4 (IR2)
-#define IR_ALUMINIUM_PIN  7   // GPIO7 (IR3)
-
-// PIR Motion Sensor (Digital)
-#define PIR_PIN           15  // GPIO15
+ * Camera Web (Smartphone) → REST API (HTTP POST) → Backend (GCP VM)
+ * Backend → MongoDB (stores detections)
+ * Backend → Webhook (triggers servo/hardware)
+ * Hardware Sensors → HTTP POST → Backend → Dashboard
 
 // MQ-2 Smoke Sensor (Analog) - A0
 #define SMOKE_PIN         10  // GPIO10 (A0/D10)
@@ -55,22 +40,17 @@
 // Buzzer (Built-in PWM) - No external pin needed, using internal
 #define BUZZER_PIN        12  // Built-in buzzer on Maker Feather AIoT S3
 
-// ==================== WIFI & MQTT CONFIGURATION ====================
-const char* WIFI_SSID = "YOUR-WIFI-SSID";           // Replace with your WiFi SSID
+// ==================== WIFI & HTTP CONFIGURATION ====================
+const char* WIFI_SSID = "Doggie";           // Replace with your WiFi SSID
 const char* WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";   // Replace with your WiFi password
-const char* MQTT_SERVER = "YOUR-MQTT-SERVER";         // Replace with your GCP VM IP
-const int MQTT_PORT = 1883;
-const char* MQTT_CLIENT_ID = "SmartRecycleBin_ESP32";
+const char* GCP_BACKEND_URL = "https://smart-bin.duckdns.org/api";  // Backend API URL
 
-// MQTT Topics
-const char* MQTT_TOPIC_SENSOR_DATA = "smartbin/sensors";     // Publish sensor data
-const char* MQTT_TOPIC_ITEM_DETECTED = "smartbin/item";      // Subscribe to camera detections
-const char* MQTT_TOPIC_COMMANDS = "smartbin/commands";       // Subscribe to dashboard commands
-const char* MQTT_TOPIC_ALERTS = "smartbin/alerts";           // Publish fire/smoke alerts
+// HTTP Endpoints
+const char* HTTP_ENDPOINT_SENSOR_UPDATE = "https://smart-bin.duckdns.org/api/webhook/bin-update";
+const char* HTTP_ENDPOINT_HEALTH = "https://smart-bin.duckdns.org/api/health";
 
 // ==================== GLOBAL OBJECTS ====================
-WiFiClient espClient;
-PubSubClient mqttClient(espClient);
+WiFiClientSecure wifiClient;
 DHT dht(DHT_PIN, DHT_TYPE);
 Servo rotateServo;  // Container rotation
 Servo lidServo;     // Bottom lid control
@@ -158,13 +138,8 @@ void setup() {
   // Connect to WiFi
   setupWiFi();
   
-  // Setup MQTT
-  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-  mqttClient.setCallback(mqttCallback);
-  mqttClient.setBufferSize(512);  // Increase buffer for JSON messages
-  
-  // Connect to MQTT
-  reconnectMQTT();
+  // Disable SSL certificate verification for self-signed certs (optional)
+  wifiClient.setInsecure();
   
   // Startup indicator
   playStartupTone();
@@ -175,12 +150,6 @@ void setup() {
 
 // ==================== MAIN LOOP ====================
 void loop() {
-  // Maintain MQTT connection
-  if (!mqttClient.connected()) {
-    reconnectMQTT();
-  }
-  mqttClient.loop();
-  
   unsigned long currentMillis = millis();
   
   // Check push button for manual reset
@@ -197,9 +166,9 @@ void loop() {
       lastSensorRead = currentMillis;
     }
     
-    // Publish sensor data to MQTT
+    // Publish sensor data to HTTP endpoint
     if (currentMillis - lastMqttPublish >= MQTT_PUBLISH_INTERVAL) {
-      publishSensorData();
+      publishSensorDataHTTP();
       lastMqttPublish = currentMillis;
     }
     
@@ -266,51 +235,29 @@ void setupWiFi() {
   }
 }
 
-// ==================== MQTT CONNECTION ====================
-void reconnectMQTT() {
-  int attempts = 0;
-  while (!mqttClient.connected() && attempts < 5) {
-    Serial.print("Attempting MQTT connection...");
-    
-    if (mqttClient.connect(MQTT_CLIENT_ID)) {
-      Serial.println("Connected to MQTT!");
-      
-      // Subscribe to topics
-      mqttClient.subscribe(MQTT_TOPIC_ITEM_DETECTED);
-      mqttClient.subscribe(MQTT_TOPIC_COMMANDS);
-      
-      Serial.println("Subscribed to topics:");
-      Serial.println("  - " + String(MQTT_TOPIC_ITEM_DETECTED));
-      Serial.println("  - " + String(MQTT_TOPIC_COMMANDS));
-      
-    } else {
-      Serial.print("Failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" Retrying in 5 seconds...");
-      delay(5000);
-      attempts++;
-    }
-  }
-}
+// ==================== MQTT CONNECTION (REMOVED - USING HTTP INSTEAD) ====================
+// Replaced with HTTP endpoints below
 
-// ==================== MQTT CALLBACK ====================
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  String message = "";
-  for (unsigned int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  
-  Serial.println("Message received on topic: " + String(topic));
-  Serial.println("Message: " + message);
-  
-  // Handle item detection from camera
-  if (strcmp(topic, MQTT_TOPIC_ITEM_DETECTED) == 0) {
-    handleItemDetection(message);
-  }
-  
-  // Handle dashboard commands
-  if (strcmp(topic, MQTT_TOPIC_COMMANDS) == 0) {
-    handleCommand(message);
+// ==================== HTTP HELPER FUNCTION ====================
+void sendHTTPRequest(const char* endpoint, const char* payload) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(wifiClient, endpoint);
+    http.addHeader("Content-Type", "application/json");
+    
+    int httpResponseCode = http.POST(payload);
+    
+    if (httpResponseCode > 0) {
+      Serial.println("HTTP Response code: " + String(httpResponseCode));
+      String response = http.getString();
+      Serial.println("Response: " + response);
+    } else {
+      Serial.println("HTTP POST failed, error: " + String(httpResponseCode));
+    }
+    
+    http.end();
+  } else {
+    Serial.println("WiFi not connected");
   }
 }
 
@@ -406,7 +353,7 @@ void handleCommand(String message) {
     
     // Turn off red LED during cooldown
     digitalWrite(LED_RED_PIN, LOW);
-    publishSensorData();
+    publishSensorDataHTTP();
     
     Serial.println("Fire alarm reset - Starting 10-minute cooldown");
     Serial.println("Sensors paused to allow smoke to dissipate");
@@ -417,7 +364,7 @@ void handleCommand(String message) {
     fillLevels[1] = 0;
     fillLevels[2] = 0;
     Serial.println("Bin marked as emptied - all fill levels reset to 0%");
-    publishSensorData();  // Immediately publish updated data
+    publishSensorDataHTTP();  // Immediately publish updated data
   }
   else if (action == "test-servo") {
     // Cycle through 3 holes: left, middle (neutral), right
@@ -630,7 +577,7 @@ void checkFireConditions(unsigned long currentMillis) {
       fireAlertActive = false;
       noTone(BUZZER_PIN);
       Serial.println("Fire alert cleared");
-      publishSensorData();  // Push cleared state
+      publishSensorDataHTTP();  // Push cleared state
     }
   }
 }
@@ -646,8 +593,8 @@ void updateLedIndicators() {
   digitalWrite(LED_GREEN_PIN, anyBinFull ? LOW : HIGH);
 }
 
-// ==================== PUBLISH SENSOR DATA ====================
-void publishSensorData() {
+// ==================== PUBLISH SENSOR DATA via HTTP ====================
+void publishSensorDataHTTP() {
   StaticJsonDocument<512> doc;
   
   doc["binId"] = binId;
@@ -667,14 +614,11 @@ void publishSensorData() {
   char buffer[512];
   serializeJson(doc, buffer);
   
-  if (mqttClient.publish(MQTT_TOPIC_SENSOR_DATA, buffer)) {
-    Serial.println("Sensor data published to MQTT");
-  } else {
-    Serial.println("Failed to publish sensor data");
-  }
+  Serial.println("Sending sensor data via HTTP POST...");
+  sendHTTPRequest(HTTP_ENDPOINT_SENSOR_UPDATE, buffer);
 }
 
-// ==================== PUBLISH FIRE ALERT ====================
+// ==================== PUBLISH FIRE ALERT via HTTP ====================
 void publishFireAlert() {
   StaticJsonDocument<256> doc;
   
@@ -687,11 +631,8 @@ void publishFireAlert() {
   char buffer[256];
   serializeJson(doc, buffer);
   
-  if (mqttClient.publish(MQTT_TOPIC_ALERTS, buffer)) {
-    Serial.println("Fire alert published to MQTT");
-  } else {
-    Serial.println("Failed to publish fire alert");
-  }
+  Serial.println("Publishing fire alert via HTTP...");
+  sendHTTPRequest(HTTP_ENDPOINT_SENSOR_UPDATE, buffer);
 }
 
 // ==================== BUZZER PATTERNS ====================
