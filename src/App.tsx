@@ -126,14 +126,7 @@ const App = () => {
     return counts
   }, [binDetections])
 
-  const overallCategoryCounts = useMemo(() => {
-    const counts = { ...emptyCategoryCounts }
-    detections.forEach(d => {
-      const key = (d.category || 'general') as keyof typeof counts
-      counts[key] = (counts[key] || 0) + 1
-    })
-    return counts
-  }, [detections])
+  // Removed unused overallCategoryCounts
 
   const topItems = useMemo(() => {
     const map = new Map<string, number>()
@@ -162,7 +155,7 @@ const App = () => {
     return Math.round(levels.reduce((sum, level) => sum + level, 0) / levels.length)
   }, [fillLevels])
 
-  const lastEvent = binDetections[0]
+  // Removed unused lastEvent
 
   const sendCommand = async (action: string) => {
     if (!selectedBin) return
