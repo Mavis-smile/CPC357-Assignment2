@@ -224,8 +224,6 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
 
         <LoadScript 
           googleMapsApiKey={apiKey}
-          version="beta"
-          libraries={GOOGLE_MAPS_LIBRARIES}
           onLoad={() => console.log('[BinMap] GoogleMaps script loaded')}
           onError={() => {
             setMapError('Failed to load Google Maps API')
