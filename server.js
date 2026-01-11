@@ -8,8 +8,10 @@ dotenv.config({ path: '.env.local' });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/';
-const DB_NAME = process.env.DB_NAME || 'smartbin';
+// Accept both MONGODB_URI (used elsewhere in the project) and MONGO_URI
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/';
+// Accept both MONGODB_DB_NAME and DB_NAME
+const DB_NAME = process.env.MONGODB_DB_NAME || process.env.DB_NAME || 'smartbin';
 
 // Middleware
 app.use(cors());
