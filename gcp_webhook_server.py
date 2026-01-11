@@ -102,8 +102,35 @@ def receive_detection():
                 print(f"⚠️  ESP32 responded with status {response.status_code}")
                 
         except requests.exceptions.RequestException as e:
-            print(f"❌ Failed to reach ESP32: {e}")
-            # Don't fail the webhook if ESP32 is unreachable
+            print(f"❌ Failed to reach ESP32 directly: {e}")
+            print(f"📥 Storing command in backend for ESP32 to poll...")
+            
+            # Store command in backend for ESP32 to poll
+            try:
+                cmd_url = f"{BACKEND_API}/bins/{bin_id}/command"
+                cmd_payload = {
+                    "command": "servo",
+                    "category": category,
+                    "itemClass": item_class,
+                    "confidence": confidence,
+                    "timestamp": timestamp,
+                    "executed": False,
+                    "createdAt": datetime.now().isoformat()
+                }
+                
+                cmd_response = requests.post(
+                    cmd_url,
+                    json=cmd_payload,
+                    timeout=3
+                )
+                
+                if cmd_response.status_code in [200, 201]:
+                    print(f"✅ Command stored in backend for ESP32 to poll")
+                else:
+                    print(f"⚠️  Failed to store command: {cmd_response.status_code}")
+                    
+            except requests.exceptions.RequestException as cmd_err:
+                print(f"❌ Failed to store command: {cmd_err}")
         
         return jsonify({
             'status': 'success',

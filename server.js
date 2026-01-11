@@ -305,6 +305,100 @@ app.post('/api/bins/:binId/register', async (req, res) => {
   }
 });
 
+// GET /api/bins/:binId/command - ESP32 polls for servo commands
+app.get('/api/bins/:binId/command', async (req, res) => {
+  try {
+    const { binId } = req.params;
+
+    // Get pending command for this bin
+    const command = await db.collection('commands').findOneAndDelete(
+      { binId, executed: false },
+      { sort: { createdAt: 1 } }
+    );
+
+    if (command.value) {
+      console.log(`📤 Sending command to ${binId}:`, command.value);
+      res.json({
+        hasCommand: true,
+        command: command.value.command,
+        category: command.value.category,
+        itemClass: command.value.itemClass
+      });
+    } else {
+      res.json({
+        hasCommand: false,
+        message: 'No pending commands'
+      });
+    }
+  } catch (error) {
+    console.error('Error getting command:', error);
+    res.status(500).json({ error: 'Failed to get command' });
+  }
+});
+
+// POST /api/bins/:binId/command - Store servo command for ESP32 to poll
+app.post('/api/bins/:binId/command', async (req, res) => {
+  try {
+    const { binId } = req.params;
+    const { command, category, itemClass, confidence, timestamp } = req.body;
+
+    const commandDoc = {
+      binId,
+      command,
+      category,
+      itemClass,
+      confidence,
+      timestamp,
+      executed: false,
+      createdAt: new Date()
+    };
+
+    const result = await db.collection('commands').insertOne(commandDoc);
+
+    console.log(`✅ Command stored for ${binId}:`, command);
+
+    res.json({
+      success: true,
+      commandId: result.insertedId,
+      message: 'Command stored for ESP32'
+    });
+  } catch (error) {
+    console.error('Error storing command:', error);
+    res.status(500).json({ error: 'Failed to store command' });
+  }
+});
+
+// GET /api/bins/:binId/command - ESP32 polls for servo commands
+app.get('/api/bins/:binId/command', async (req, res) => {
+  try {
+    const { binId } = req.params;
+
+    // Get pending command for this bin
+    const command = await db.collection('commands').findOneAndDelete(
+      { binId, executed: false },
+      { sort: { createdAt: 1 } }
+    );
+
+    if (command.value) {
+      console.log(`📤 Sending command to ${binId}:`, command.value);
+      res.json({
+        hasCommand: true,
+        command: command.value.command,
+        category: command.value.category,
+        itemClass: command.value.itemClass
+      });
+    } else {
+      res.json({
+        hasCommand: false,
+        message: 'No pending commands'
+      });
+    }
+  } catch (error) {
+    console.error('Error getting command:', error);
+    res.status(500).json({ error: 'Failed to get command' });
+  }
+});
+
 // PATCH /api/bins/:binId - Update bin sensor data from hardware
 app.patch('/api/bins/:binId', async (req, res) => {
   try {
