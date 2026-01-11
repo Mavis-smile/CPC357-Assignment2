@@ -2,6 +2,12 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+function normalizeArray<T = any>(data: any, key: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && Array.isArray(data[key])) return data[key] as T[];
+  return [];
+}
+
 export interface Detection {
   _id?: string;
   id?: string;
@@ -39,7 +45,8 @@ export interface Command {
 export async function fetchDetections(limit = 200): Promise<Detection[]> {
   try {
     const response = await axios.get(`${API_BASE_URL}/detections?limit=${limit}`);
-    return response.data.map((d: any) => ({
+    const list = normalizeArray(response.data, 'detections');
+    return list.map((d: any) => ({
       ...d,
       id: d._id?.toString() || d.id,
       timestamp: d.timestamp ? new Date(d.timestamp) : null,
@@ -54,7 +61,8 @@ export async function fetchDetections(limit = 200): Promise<Detection[]> {
 export async function fetchBins(): Promise<Bin[]> {
   try {
     const response = await axios.get(`${API_BASE_URL}/bins`);
-    return response.data.map((b: any) => ({
+    const list = normalizeArray(response.data, 'bins');
+    return list.map((b: any) => ({
       ...b,
       id: b._id?.toString() || b.id,
       updatedAt: b.updatedAt ? new Date(b.updatedAt) : null,
