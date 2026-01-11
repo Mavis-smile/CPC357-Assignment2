@@ -24,6 +24,7 @@ SERVO_POSITIONS = {
     'aluminium': 180 # 180 degrees
 }
 
+@app.route('/detection', methods=['POST'])
 @app.route('/webhook/detection', methods=['POST'])
 def receive_detection():
     try:
