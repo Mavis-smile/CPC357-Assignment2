@@ -85,7 +85,8 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
     streetViewControl: false,
     mapTypeControl: true,
     clickableIcons: true,
-    mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement
+    // AdvancedMarkerElement works with the vector map. If you have a real mapId,
+    // set it here. Placeholder mapId can cause script errors.
   }
 
   // Handle marker click
@@ -111,85 +112,100 @@ const BinMap = ({ bins, selectedBin }: BinMapProps) => {
       return
     }
 
-    // Clean up existing marker
-    if (markerRef.current) {
-      markerRef.current.map = null
-      markerRef.current = null
-    }
+    const run = async () => {
+      // Clean up existing marker
+      if (markerRef.current) {
+        markerRef.current.map = null
+        markerRef.current = null
+      }
 
-    // Create custom marker content
-    const markerContent = document.createElement('div')
-    markerContent.style.cssText = `
-      width: 50px;
-      height: 65px;
-      position: relative;
-      cursor: pointer;
-    `
-    markerContent.innerHTML = `
-      <svg width="50" height="65" viewBox="0 0 50 65" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="shadow-${selectedBinData.binId}" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/>
-          </filter>
-        </defs>
-        <path 
-          d="M25 2 C13 2 3 12 3 24 C3 42 25 63 25 63 C25 63 47 42 47 24 C47 12 37 2 25 2 Z" 
-          fill="#22c55e" 
-          stroke="#16a34a" 
-          stroke-width="2.5"
-          filter="url(#shadow-${selectedBinData.binId})"
-        />
-        <circle cx="25" cy="22" r="11" fill="white" opacity="0.95"/>
-        <text 
-          x="25" 
-          y="30" 
-          font-family="Arial, sans-serif" 
-          font-size="22" 
-          text-anchor="middle" 
-          dominant-baseline="middle"
-        >🗑️</text>
-      </svg>
-      <div style="
-        position: absolute;
-        bottom: -22px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: white;
-        padding: 3px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: bold;
-        color: #16a34a;
-        white-space: nowrap;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-        border: 1px solid #e5e7eb;
-      ">${selectedBinData.binId}</div>
-    `
+      // Create custom marker content
+      const markerContent = document.createElement('div')
+      markerContent.style.cssText = `
+        width: 50px;
+        height: 65px;
+        position: relative;
+        cursor: pointer;
+      `
+      markerContent.innerHTML = `
+        <svg width="50" height="65" viewBox="0 0 50 65" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="shadow-${selectedBinData.binId}" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/>
+            </filter>
+          </defs>
+          <path 
+            d="M25 2 C13 2 3 12 3 24 C3 42 25 63 25 63 C25 63 47 42 47 24 C47 12 37 2 25 2 Z" 
+            fill="#22c55e" 
+            stroke="#16a34a" 
+            stroke-width="2.5"
+            filter="url(#shadow-${selectedBinData.binId})"
+          />
+          <circle cx="25" cy="22" r="11" fill="white" opacity="0.95"/>
+          <text 
+            x="25" 
+            y="30" 
+            font-family="Arial, sans-serif" 
+            font-size="22" 
+            text-anchor="middle" 
+            dominant-baseline="middle"
+          >🗑️</text>
+        </svg>
+        <div style="
+          position: absolute;
+          bottom: -22px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: white;
+          padding: 3px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: bold;
+          color: #16a34a;
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+          border: 1px solid #e5e7eb;
+        ">${selectedBinData.binId}</div>
+      `
 
-    // Create new AdvancedMarkerElement
-    try {
-      const { AdvancedMarkerElement } = google.maps.marker as any
-      
-      const marker = new AdvancedMarkerElement({
-        map,
-        position: {
+      try {
+        // Ensure the 'marker' library is loaded before using AdvancedMarkerElement
+        let AdvancedMarkerElementCtor: any
+        if ((google.maps as any).importLibrary) {
+          const markerLib = await (google.maps as any).importLibrary('marker')
+          AdvancedMarkerElementCtor = (markerLib as any).AdvancedMarkerElement
+        } else {
+          AdvancedMarkerElementCtor = (google.maps as any).marker?.AdvancedMarkerElement
+        }
+
+        if (!AdvancedMarkerElementCtor) {
+          throw new Error('AdvancedMarkerElement not available. Ensure v=beta and libraries=marker are loaded.')
+        }
+
+        const marker = new AdvancedMarkerElementCtor({
+          map,
+          position: {
+            lat: Number(selectedBinData.latitude),
+            lng: Number(selectedBinData.longitude)
+          },
+          content: markerContent,
+          title: `${selectedBinData.binId} - ${selectedBinData.address || 'No address'}`
+        })
+
+        marker.addListener('click', handleMarkerClick)
+        markerRef.current = marker
+
+        console.log('[BinMap] AdvancedMarkerElement created at:', {
           lat: Number(selectedBinData.latitude),
           lng: Number(selectedBinData.longitude)
-        },
-        content: markerContent,
-        title: `${selectedBinData.binId} - ${selectedBinData.address || 'No address'}`
-      })
-
-      marker.addListener('click', handleMarkerClick)
-      markerRef.current = marker
-      
-      console.log('[BinMap] AdvancedMarkerElement created at:', {
-        lat: Number(selectedBinData.latitude),
-        lng: Number(selectedBinData.longitude)
-      })
-    } catch (error) {
-      console.error('[BinMap] Failed to create AdvancedMarkerElement:', error)
+        })
+      } catch (error) {
+        console.error('[BinMap] Failed to create AdvancedMarkerElement:', error)
+        setMapError('Failed to load Google Maps Advanced Markers. Check API key, v=beta, and libraries=marker.')
+      }
     }
+
+    run()
 
     return () => {
       if (markerRef.current) {
