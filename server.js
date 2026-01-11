@@ -261,11 +261,55 @@ app.get('/api/bins/:binId', async (req, res) => {
   }
 });
 
+// POST /api/bins/:binId/register - ESP32 registration endpoint
+app.post('/api/bins/:binId/register', async (req, res) => {
+  try {
+    const { binId } = req.params;
+    const { localIP } = req.body;
+
+    if (!localIP) {
+      return res.status(400).json({ error: 'localIP is required' });
+    }
+
+    await db.collection('bins').updateOne(
+      { binId },
+      { 
+        $set: { 
+          localIP,
+          lastSeen: new Date(),
+          updatedAt: new Date()
+        },
+        $setOnInsert: { 
+          createdAt: new Date(), 
+          binId,
+          isActive: true
+        }
+      },
+      { upsert: true }
+    );
+
+    console.log(`✅ ESP32 ${binId} registered at ${localIP}`);
+
+    res.json({ 
+      success: true, 
+      binId,
+      localIP,
+      message: 'ESP32 registered successfully'
+    });
+  } catch (error) {
+    console.error('Error registering ESP32:', error);
+    res.status(500).json({ 
+      error: 'Failed to register ESP32',
+      message: error.message 
+    });
+  }
+});
+
 // PATCH /api/bins/:binId - Update bin sensor data from hardware
 app.patch('/api/bins/:binId', async (req, res) => {
   try {
     const { binId } = req.params;
-    const { fillLevels, temperature, humidity, smokeLevel, fireAlert, isActive } = req.body;
+    const { fillLevels, temperature, humidity, smokeLevel, fireAlert, isActive, localIP } = req.body;
 
     const updateData = {
       updatedAt: new Date()
@@ -278,6 +322,10 @@ app.patch('/api/bins/:binId', async (req, res) => {
     if (smokeLevel !== undefined) updateData.smokeLevel = smokeLevel;
     if (fireAlert !== undefined) updateData.fireAlert = fireAlert;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (localIP !== undefined) {
+      updateData.localIP = localIP;
+      console.log(`📍 ESP32 ${binId} registered at ${localIP}`);
+    }
 
     const result = await db.collection('bins').updateOne(
       { binId },
