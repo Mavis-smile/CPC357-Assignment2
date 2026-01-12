@@ -59,8 +59,8 @@
 #define BUZZER_PIN        12  // Built-in buzzer on Maker Feather AIoT S3
 
 // ==================== WIFI & HTTP CONFIGURATION ====================
-const char* WIFI_SSID = "Doggie";           // Replace with your WiFi SSID
-const char* WIFI_PASSWORD = "tttww0127";   // Replace with your WiFi password
+const char* WIFI_SSID = "YOUR_WIFI_SSID";           // Replace with your WiFi SSID
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";   // Replace with your WiFi password
 const char* GCP_BACKEND_URL = "https://smart-bin.duckdns.org/api";  // Backend API URL
 
 // HTTP Endpoints
