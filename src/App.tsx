@@ -158,10 +158,14 @@ const App = () => {
   // Removed unused lastEvent
 
   const sendCommand = async (action: string) => {
-    if (!selectedBin) return
+    if (!selectedBin) {
+      setActionMessage('❌ No bin selected')
+      return
+    }
     setIsSendingCmd(true)
     setActionMessage('')
     try {
+      console.log(`📤 Sending command: ${action} to bin: ${selectedBin}`)
       // Send command to MongoDB via API
       await apiSendCommand({ binId: selectedBin, action })
       
@@ -187,10 +191,11 @@ const App = () => {
         )
       }
       
-      setActionMessage(`${action} command queued for ${selectedBin}`)
+      setActionMessage(`✅ ${action} command queued for ${selectedBin}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to send command'
-      setActionMessage(message)
+      console.error('Command error:', message)
+      setActionMessage(`❌ ${message}`)
     } finally {
       setIsSendingCmd(false)
     }

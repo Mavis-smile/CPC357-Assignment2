@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 function normalizeArray<T = any>(data: any, key: string): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -76,7 +76,22 @@ export async function fetchBins(): Promise<Bin[]> {
 // Send a command
 export async function sendCommand(command: Command): Promise<void> {
   try {
-    await axios.post(`${API_BASE_URL}/commands`, command);
+    // Extract category from action if it's a servo test command
+    let category = '';
+    const action = command.action;
+    
+    if (action.includes('paper')) {
+      category = 'paper';
+    } else if (action.includes('plastic')) {
+      category = 'plastic';
+    } else if (action.includes('aluminium')) {
+      category = 'aluminium';
+    }
+    
+    await axios.post(`${API_BASE_URL}/bins/${command.binId}/command`, { 
+      command: action,
+      category: category || undefined  // Include category if available
+    });
   } catch (error) {
     console.error('Error sending command:', error);
     throw error;
