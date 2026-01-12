@@ -311,18 +311,21 @@ app.get('/api/bins/:binId/command', async (req, res) => {
     const { binId } = req.params;
 
     // Get pending command for this bin
-    const command = await db.collection('commands').findOneAndDelete(
+    const result = await db.collection('commands').findOneAndDelete(
       { binId, executed: false },
       { sort: { createdAt: 1 } }
     );
 
-    if (command.value) {
-      console.log(`📤 Sending command to ${binId}:`, command.value);
+    // Handle both cases: result.value exists or result is null
+    const command = result?.value || result;
+
+    if (command) {
+      console.log(`📤 Sending command to ${binId}:`, command);
       res.json({
         hasCommand: true,
-        command: command.value.command,
-        category: command.value.category,
-        itemClass: command.value.itemClass
+        command: command.command,
+        category: command.category,
+        itemClass: command.itemClass
       });
     } else {
       res.json({
@@ -331,8 +334,8 @@ app.get('/api/bins/:binId/command', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error getting command:', error);
-    res.status(500).json({ error: 'Failed to get command' });
+    console.error('❌ Error getting command:', error.message);
+    res.status(500).json({ error: 'Failed to get command', details: error.message });
   }
 });
 
@@ -341,6 +344,13 @@ app.post('/api/bins/:binId/command', async (req, res) => {
   try {
     const { binId } = req.params;
     const { command, category, itemClass, confidence, timestamp } = req.body;
+
+    console.log(`📝 POST received for ${binId}, body:`, JSON.stringify(req.body));
+
+    if (!command) {
+      console.error(`❌ Missing command field for ${binId}`);
+      return res.status(400).json({ error: 'Missing command field' });
+    }
 
     const commandDoc = {
       binId,
@@ -353,9 +363,11 @@ app.post('/api/bins/:binId/command', async (req, res) => {
       createdAt: new Date()
     };
 
+    console.log(`💾 Storing command doc:`, JSON.stringify(commandDoc));
+
     const result = await db.collection('commands').insertOne(commandDoc);
 
-    console.log(`✅ Command stored for ${binId}:`, command);
+    console.log(`✅ Command stored for ${binId}:`, command, 'ID:', result.insertedId);
 
     res.json({
       success: true,
@@ -363,39 +375,8 @@ app.post('/api/bins/:binId/command', async (req, res) => {
       message: 'Command stored for ESP32'
     });
   } catch (error) {
-    console.error('Error storing command:', error);
-    res.status(500).json({ error: 'Failed to store command' });
-  }
-});
-
-// GET /api/bins/:binId/command - ESP32 polls for servo commands
-app.get('/api/bins/:binId/command', async (req, res) => {
-  try {
-    const { binId } = req.params;
-
-    // Get pending command for this bin
-    const command = await db.collection('commands').findOneAndDelete(
-      { binId, executed: false },
-      { sort: { createdAt: 1 } }
-    );
-
-    if (command.value) {
-      console.log(`📤 Sending command to ${binId}:`, command.value);
-      res.json({
-        hasCommand: true,
-        command: command.value.command,
-        category: command.value.category,
-        itemClass: command.value.itemClass
-      });
-    } else {
-      res.json({
-        hasCommand: false,
-        message: 'No pending commands'
-      });
-    }
-  } catch (error) {
-    console.error('Error getting command:', error);
-    res.status(500).json({ error: 'Failed to get command' });
+    console.error('❌ Error storing command:', error.message);
+    res.status(500).json({ error: 'Failed to store command', details: error.message });
   }
 });
 
