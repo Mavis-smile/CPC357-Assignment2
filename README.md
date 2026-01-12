@@ -10,6 +10,7 @@ Real-time waste detection system using AI-powered camera vision. Built for Smart
 
 1️⃣ Clone the Repository
 git clone https://github.com/Mavis-smile/CPC357-Assignment2.git
+
 cd CPC357-Assignment2
 
 If you already have it:
@@ -33,7 +34,7 @@ Paste below code into your .env.local and change the required credential accordi
 MONGO_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/
 DB_NAME=smartbin
 PORT=4000
-GCP_HARDWARE_WEBHOOK_URL=http://YOUR_GCP_VM_IP:5000/webhook/detection
+GCP_HARDWARE_WEBHOOK_URL=https://smart-bin.duckdns.org/webhook/detection
 # Frontend
 VITE_API_BASE_URL=http://localhost:4000/api
 
