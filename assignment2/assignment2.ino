@@ -21,7 +21,9 @@
  */
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <WebServer.h>
 #include <DHT.h>
 #include <ESP32Servo.h>
 #include <ArduinoJson.h>
@@ -58,15 +60,16 @@
 
 // ==================== WIFI & HTTP CONFIGURATION ====================
 const char* WIFI_SSID = "Doggie";           // Replace with your WiFi SSID
-const char* WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";   // Replace with your WiFi password
+const char* WIFI_PASSWORD = "tttww0127";   // Replace with your WiFi password
 const char* GCP_BACKEND_URL = "https://smart-bin.duckdns.org/api";  // Backend API URL
 
 // HTTP Endpoints
-const char* HTTP_ENDPOINT_SENSOR_UPDATE = "https://smart-bin.duckdns.org/api/webhook/bin-update";
+const char* HTTP_ENDPOINT_BASE = "https://smart-bin.duckdns.org/api/bins";
 const char* HTTP_ENDPOINT_HEALTH = "https://smart-bin.duckdns.org/api/health";
 
 // ==================== GLOBAL OBJECTS ====================
 WiFiClientSecure wifiClient;
+WebServer server(80);  // HTTP server on port 80
 DHT dht(DHT_PIN, DHT_TYPE);
 Servo rotateServo;  // Container rotation
 Servo lidServo;     // Bottom lid control
@@ -134,6 +137,10 @@ float currentHumidity = 0;
 int smokeLevel = 0;
 int lastButtonState = HIGH;  // Button state (pulled up)
 
+// ==================== FUNCTION DECLARATIONS ====================
+void sendHTTPRequest(const char* endpoint, const char* payload, const char* method = "POST");
+void registerWithBackend();
+
 // ==================== SETUP ====================
 void setup() {
   Serial.begin(115200);
@@ -148,14 +155,27 @@ void setup() {
   // Initialize Servos
   rotateServo.attach(SERVO_ROTATE_PIN);
   lidServo.attach(SERVO_LID_PIN);
+  Serial.println("✅ Servos attached to pins: " + String(SERVO_ROTATE_PIN) + ", " + String(SERVO_LID_PIN));
   rotateServo.write(SERVO_ROTATE_NEUTRAL);
   lidServo.write(SERVO_LID_CLOSED);
+  Serial.println("✅ Servos initialized to neutral/closed positions");
   
   // Connect to WiFi
   setupWiFi();
   
   // Disable SSL certificate verification for self-signed certs (optional)
   wifiClient.setInsecure();
+  
+  // Start HTTP server to receive detection messages
+  server.on("/detection", HTTP_POST, handleDetectionEndpoint);
+  server.on("/test/servo", HTTP_GET, handleTestServo);  // Test servo endpoint
+  server.begin();
+  Serial.println("HTTP server started on port 80");
+  Serial.print("ESP32 IP: ");
+  Serial.println(WiFi.localIP());
+  
+  // Register ESP32 IP with backend
+  registerWithBackend();
   
   // Startup indicator
   playStartupTone();
@@ -167,6 +187,9 @@ void setup() {
 // ==================== MAIN LOOP ====================
 void loop() {
   unsigned long currentMillis = millis();
+  
+  // Handle incoming HTTP requests
+  server.handleClient();
   
   // Check push button for manual reset
   checkPushButton(currentMillis);
@@ -192,10 +215,152 @@ void loop() {
     checkFireConditions(currentMillis);
   }
   
+  // Poll for servo commands from backend every 2 seconds
+  static unsigned long lastCommandPoll = 0;
+  if (currentMillis - lastCommandPoll >= 2000) {
+    pollForCommand();
+    lastCommandPoll = currentMillis;
+  }
+  
   // Update LED indicators based on fill levels
   updateLedIndicators();
   
   delay(100);  // Small delay to prevent CPU overload
+}
+
+// ==================== POLL FOR SERVO COMMANDS ====================
+void pollForCommand() {
+  String endpoint = String(HTTP_ENDPOINT_BASE) + "/" + binId + "/command";
+  
+  HTTPClient http;
+  http.begin(wifiClient, endpoint);
+  http.addHeader("Content-Type", "application/json");
+  
+  int httpResponseCode = http.GET();
+
+  Serial.println("[COMMAND] Polling: " + endpoint);
+  Serial.println("[COMMAND] Response Code: " + String(httpResponseCode));
+  
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.println("[COMMAND] Response: " + payload);
+    
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (!error) {
+      bool hasCommand = doc["hasCommand"] | false;
+      Serial.println("[COMMAND] hasCommand: " + String(hasCommand));
+      if (hasCommand) {
+        String category = doc["category"] | "";
+        String command = doc["command"] | "";
+        Serial.println("🎯 Got servo command: " + command + " for category: " + category);
+        
+        // Move servo based on category
+        if (category == "plastic") {
+          Serial.println(">> Executing plastic slot");
+          rotateServo.write(SERVO_ROTATE_LEFT_90);
+          delay(1000);
+          lidServo.write(SERVO_LID_OPEN);
+          delay(2000);
+          lidServo.write(SERVO_LID_CLOSED);
+          delay(500);
+          rotateServo.write(SERVO_ROTATE_NEUTRAL);
+          delay(1500);
+          Serial.println(">> Plastic test done");
+        } 
+        else if (category == "aluminium") {
+          Serial.println(">> Executing aluminium slot");
+          lidServo.write(SERVO_LID_OPEN);
+          delay(2000);
+          lidServo.write(SERVO_LID_CLOSED);
+          delay(1500);
+          Serial.println(">> Aluminium test done");
+        } 
+        else if (category == "paper") {
+          Serial.println(">> Executing paper slot");
+          rotateServo.write(SERVO_ROTATE_RIGHT_90);
+          delay(1000);
+          lidServo.write(SERVO_LID_OPEN);
+          delay(2000);
+          lidServo.write(SERVO_LID_CLOSED);
+          delay(500);
+          rotateServo.write(SERVO_ROTATE_NEUTRAL);
+          delay(1500);
+          Serial.println(">> Paper test done");
+        } else {
+          Serial.println("❌ Unknown category: " + category);
+        }
+      }
+    } else {
+      Serial.println("[COMMAND] JSON parse error");
+    }
+  } else if (httpResponseCode == 404) {
+    // No command yet, that's okay
+  } else {
+    Serial.print("[COMMAND] Error: ");
+    Serial.println(httpResponseCode);
+  }
+  
+  http.end();
+}
+
+// ==================== REGISTER ESP32 WITH BACKEND ====================
+void registerWithBackend() {
+  String endpoint = String(HTTP_ENDPOINT_BASE) + "/" + binId + "/register";
+  String localIP = WiFi.localIP().toString();
+  
+  StaticJsonDocument<128> doc;
+  doc["localIP"] = localIP;
+  
+  char buffer[128];
+  serializeJson(doc, buffer);
+  
+  Serial.println("\n📡 Registering ESP32 with backend...");
+  Serial.println("Endpoint: " + endpoint);
+  Serial.println("Local IP: " + localIP);
+  
+  sendHTTPRequest(endpoint.c_str(), buffer, "POST");
+}
+
+// ==================== HTTP ENDPOINT HANDLER ====================
+void handleDetectionEndpoint() {
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"No body\"}");
+    return;
+  }
+  
+  String body = server.arg("plain");
+  Serial.println("\n[HTTP] Received detection:");
+  Serial.println(body);
+  
+  // Parse and handle the detection
+  handleItemDetection(body);
+  
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+// ==================== TEST SERVO ENDPOINT ====================
+void handleTestServo() {
+  String category = server.arg("category");  // "plastic", "aluminium", "paper"
+  if (category.length() == 0) category = "plastic";
+  
+  Serial.println("\n🧪 TEST: Manual servo trigger");
+  Serial.println("Category: " + category);
+  
+  // Create fake detection JSON
+  StaticJsonDocument<128> doc;
+  doc["binId"] = binId;
+  doc["category"] = category;
+  doc["itemClass"] = "test";
+  doc["confidence"] = 100;
+  
+  String json;
+  serializeJson(doc, json);
+  
+  handleItemDetection(json);
+  
+  server.send(200, "application/json", "{\"status\":\"servo test triggered\"}");
 }
 
 // ==================== PIN SETUP ====================
@@ -255,26 +420,52 @@ void setupWiFi() {
 // Replaced with HTTP endpoints below
 
 // ==================== HTTP HELPER FUNCTION ====================
-void sendHTTPRequest(const char* endpoint, const char* payload) {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(wifiClient, endpoint);
-    http.addHeader("Content-Type", "application/json");
-    
-    int httpResponseCode = http.POST(payload);
-    
-    if (httpResponseCode > 0) {
-      Serial.println("HTTP Response code: " + String(httpResponseCode));
-      String response = http.getString();
-      Serial.println("Response: " + response);
-    } else {
-      Serial.println("HTTP POST failed, error: " + String(httpResponseCode));
-    }
-    
-    http.end();
-  } else {
-    Serial.println("WiFi not connected");
+void sendHTTPRequest(const char* endpoint, const char* payload, const char* method) {
+  Serial.print("WiFi status: ");
+  Serial.println(WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected");
+  Serial.print("Endpoint: ");
+  Serial.println(endpoint);
+  Serial.print("Method: ");
+  Serial.println(method);
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected! Reconnecting...");
+    setupWiFi();
+    return;
   }
+  
+  HTTPClient http;
+  Serial.println("Attempting HTTP connection...");
+  
+  if (!http.begin(wifiClient, endpoint)) {
+    Serial.println("HTTP begin failed!");
+    return;
+  }
+  
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(10000); // 10 second timeout
+  
+  Serial.print("Sending ");
+  Serial.print(method);
+  Serial.println(" request...");
+  
+  int httpResponseCode;
+  if (strcmp(method, "PATCH") == 0) {
+    httpResponseCode = http.PATCH((uint8_t*)payload, strlen(payload));
+  } else {
+    httpResponseCode = http.POST(payload);
+  }
+  
+  if (httpResponseCode > 0) {
+    Serial.println("✓ HTTP Response code: " + String(httpResponseCode));
+    String response = http.getString();
+    Serial.println("Response: " + response);
+  } else {
+    Serial.println("✗ HTTP request failed, error: " + String(httpResponseCode));
+    Serial.println("Error message: " + http.errorToString(httpResponseCode));
+  }
+  
+  http.end();
 }
 
 // ==================== ITEM DETECTION HANDLER ====================
@@ -422,6 +613,7 @@ void handleCommand(String message) {
     lidServo.write(SERVO_LID_CLOSED);
     delay(500);
     rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    delay(1500);  // Wait for servo to return to neutral
     Serial.println("Paper test done");
   }
   else if (action == "test-servo-plastic") {
@@ -433,6 +625,7 @@ void handleCommand(String message) {
     lidServo.write(SERVO_LID_CLOSED);
     delay(500);
     rotateServo.write(SERVO_ROTATE_NEUTRAL);
+    delay(1500);  // Wait for servo to return to neutral
     Serial.println("Plastic test done");
   }
   else if (action == "test-servo-aluminium") {
@@ -476,7 +669,7 @@ void checkPushButton(unsigned long currentMillis) {
       
       // Turn off red LED
       digitalWrite(LED_RED_PIN, LOW);
-      publishSensorData();
+      publishSensorDataHTTP();
       
       Serial.println("[BUTTON] Fire alarm manually reset - 10-min cooldown started");
     } else {
@@ -630,8 +823,11 @@ void publishSensorDataHTTP() {
   char buffer[512];
   serializeJson(doc, buffer);
   
-  Serial.println("Sending sensor data via HTTP POST...");
-  sendHTTPRequest(HTTP_ENDPOINT_SENSOR_UPDATE, buffer);
+  // Construct endpoint dynamically using binId
+  String endpoint = String(HTTP_ENDPOINT_BASE) + "/" + binId;
+  
+  Serial.println("Sending sensor data via HTTP PATCH...");
+  sendHTTPRequest(endpoint.c_str(), buffer, "PATCH");
 }
 
 // ==================== PUBLISH FIRE ALERT via HTTP ====================
@@ -647,8 +843,11 @@ void publishFireAlert() {
   char buffer[256];
   serializeJson(doc, buffer);
   
+  // Construct endpoint dynamically using binId
+  String endpoint = String(HTTP_ENDPOINT_BASE) + "/" + binId;
+  
   Serial.println("Publishing fire alert via HTTP...");
-  sendHTTPRequest(HTTP_ENDPOINT_SENSOR_UPDATE, buffer);
+  sendHTTPRequest(endpoint.c_str(), buffer);
 }
 
 // ==================== BUZZER PATTERNS ====================
