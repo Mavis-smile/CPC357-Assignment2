@@ -295,43 +295,4 @@ startBridge().catch(err => {
   process.exit(1);
 });
 
-// ============================================================================
-// GRACEFUL SHUTDOWN
-// ============================================================================
 
-process.on('SIGINT', () => {
-  console.log('\n\n🛑 Shutting down gracefully...');
-  
-  mqttClient.publish('bridge/status', JSON.stringify({
-    status: 'offline',
-    timestamp: Date.now()
-  }));
-  
-  mqttClient.end(false, () => {
-    console.log('✅ MQTT disconnected');
-    process.exit(0);
-  });
-  
-  // Force exit after 5 seconds
-  setTimeout(() => {
-    console.error('❌ Forced shutdown');
-    process.exit(1);
-  }, 5000);
-});
-
-// ============================================================================
-// ERROR HANDLING
-// ============================================================================
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Promise Rejection:', reason);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
-  process.exit(1);
-});
-
-// Keep process alive
-console.log('✅ MQTT-Firebase bridge running...');
-console.log('💡 Waiting for MQTT messages and Firebase commands...\n');

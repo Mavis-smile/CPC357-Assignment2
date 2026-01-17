@@ -113,7 +113,7 @@ const int BUZZER_FREQ_FIRE_ALERT = 2000;
 
 // Timing intervals (milliseconds)
 const unsigned long SENSOR_READ_INTERVAL = 5000;      // Read sensors every 5 seconds
-const unsigned long MQTT_PUBLISH_INTERVAL = 10000;    // Publish to MQTT every 10 seconds
+const unsigned long HTTP_PUBLISH_INTERVAL = 10000;    // Publish to HTTP every 10 seconds
 const unsigned long PIR_IDLE_TIMEOUT = 60000;         // 1 minute no motion = idle mode
 const unsigned long FIRE_COOLDOWN_PERIOD = 600000;    // 10 minutes cooldown after fire reset
 
@@ -126,7 +126,7 @@ bool inFireCooldown = false;  // Cooldown mode after fire reset
 int fillLevels[3] = {0, 0, 0};  // Fill levels for [Paper, Plastic, Aluminium]
 
 unsigned long lastSensorRead = 0;
-unsigned long lastMqttPublish = 0;
+unsigned long lastHttpPublish = 0;
 unsigned long lastPirDetection = 0;
 unsigned long lastFireAlert = 0;
 unsigned long fireCooldownStart = 0;  // When fire cooldown started
@@ -206,9 +206,9 @@ void loop() {
     }
     
     // Publish sensor data to HTTP endpoint
-    if (currentMillis - lastMqttPublish >= MQTT_PUBLISH_INTERVAL) {
+    if (currentMillis - lastHttpPublish >= HTTP_PUBLISH_INTERVAL) {
       publishSensorDataHTTP();
-      lastMqttPublish = currentMillis;
+      lastHttpPublish = currentMillis;
     }
     
     // Check for fire/smoke conditions
@@ -415,9 +415,6 @@ void setupWiFi() {
     Serial.println("\nWiFi connection failed!");
   }
 }
-
-// ==================== MQTT CONNECTION (REMOVED - USING HTTP INSTEAD) ====================
-// Replaced with HTTP endpoints below
 
 // ==================== HTTP HELPER FUNCTION ====================
 void sendHTTPRequest(const char* endpoint, const char* payload, const char* method) {
@@ -767,7 +764,7 @@ void checkFireConditions(unsigned long currentMillis) {
       fireAlertActive = true;
       Serial.println("!!! FIRE ALERT TRIGGERED !!!");
       
-      // Publish alert to MQTT immediately
+      // Publish alert immediately
       publishFireAlert();
     }
     
