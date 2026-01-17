@@ -1,135 +1,180 @@
-# Dashboard (React + Express + MongoDB)
+# 📊 Smart Recycle Bin - Dashboard
 
-Web dashboard for real-time monitoring and analytics of IoT smart bins. Displays bin locations, fill levels, recent detections, and supports simple control actions.
+Real-time monitoring and control dashboard for IoT smart bins with live data visualization and remote command capabilities.
 
-Live URL (Netlify): https://smart-bin-cpc357.netlify.app/
+**Live URL:** https://smart-bin-cpc357.netlify.app
 
-## 🚀 Setup (Local Development)
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- npm
-- MongoDB Atlas account (or reachable MongoDB instance)
+- MongoDB Atlas account
 
-### 1) Clone and install
+### 1. Install Dependencies
 ```bash
-git clone -b dashboard https://github.com/Mavis-smile/CPC357-Assignment2.git
-cd CPC357-Assignment2/dashboard/CPC357-Assignment2
 npm install
 ```
 
-### 2) Environment variables (.env.local)
-Create a `.env.local` file in this folder with:
+### 2. Configure Environment
+Create `.env.local`:
 ```env
-# Backend (Express)
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/
+# MongoDB
+MONGODB_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/
 MONGODB_DB_NAME=smartbin
-PORT=3001
 
-# Frontend (Vite)
-VITE_API_URL=http://localhost:3001/api
-VITE_MAPS_API_KEY=<YOUR_GOOGLE_MAPS_API_KEY>
+# Backend Port
+PORT=4000
+
+# Frontend API URL
+VITE_API_URL=http://localhost:4000/api
+
+# Google Maps API (Optional)
+VITE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_KEY
 ```
 
-### 3) Run locally
+### 3. Start Application
 ```bash
-# Start both frontend (Vite) and backend (Express)
+# Start both frontend and backend
+npm start
 
-
-# Or run separately
-npm run server:dev  # backend on http://localhost:3001
-npm run dev         # frontend on http://localhost:5173
+# Or run separately:
+npm run server:dev  # Backend on port 4000
+npm run dev         # Frontend on port 5173
 ```
 
----
-
-## 🧰 Project Structure
-
+## 📁 Project Structure
 ```
 dashboard/CPC357-Assignment2/
-├── public/
-├── server/               # Express API + webhooks for IoT updates
+├── server/               # Express API + webhooks
 │   ├── db.ts
 │   └── index.ts
-├── src/                  # React + Vite frontend
-│   ├── App.tsx
-│   ├── BinMap.tsx
-│   ├── api.ts
+├── src/                  # React frontend
+│   ├── App.tsx           # Main dashboard
+│   ├── BinMap.tsx        # Map component
+│   ├── api.ts            # API client
 │   └── main.tsx
-├── .env.local            # Local env (not committed)
-├── netlify.toml          # Netlify build config
-├── package.json
-├── tailwind.config.js
-├── tsconfig.json
-└── vite.config.ts
+├── .env.local
+└── package.json
 ```
 
----
+## 🎯 Features
 
-## 🌐 Deployment (Netlify + GCP Backend)
+### Real-time Monitoring
+- Live sensor data updates (every 5 seconds)
+- Fill levels for 3 compartments (Paper, Plastic, Aluminium)
+- Temperature, humidity, smoke levels
+- Fire alert notifications
+- Bin activity status (active/idle)
 
-The frontend is deployed on Netlify. Environment variables must be set in Netlify because `.env.local` is not used during build.
+### Data Visualization
+- Recent detections (last 24 hours)
+- Category breakdown charts
+- Top items detected
+- Bin location on map
+- Historical data analysis
 
-### Netlify build settings
-- Base directory: `dashboard/CPC357-Assignment2`
-- Build command: `npm run build`
-- Publish directory: `dist`
+### Remote Control
+- Reset fire alarm
+- Mark bin as emptied
+- Test servo motors (Paper, Plastic, Aluminium)
+- Maintenance mode toggle
 
-### Netlify environment variables
-- `VITE_MAPS_API_KEY` = your Google Maps API key
-- `VITE_API_URL` = your backend API URL (e.g., `https://<your-cloud-run-url>/api`)
+## 🌐 API Endpoints
 
-After adding env vars, trigger: Deploys → “Clear cache and deploy site”.
+### Dashboard APIs
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/detections?limit=200` | Recent detections |
+| GET | `/api/bins` | All bins metadata |
+| GET | `/api/bins/:binId` | Single bin data |
+| POST | `/api/commands` | Queue command for bin |
+| PATCH | `/api/bins/:binId` | Update bin data |
 
-### Backend deployment (GCP recommended)
-Deploy the Express API (in `server/`) to Google Cloud Run/App Engine/VM. Make sure CORS allows your Netlify domain.
+### Webhook APIs (IoT Integration)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/webhook/detection` | Camera detection payload |
+| POST | `/api/webhook/bin-update` | Sensor data update |
 
-Example CORS in `server/index.ts`:
-```ts
+## 🛠️ Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development (frontend + backend)
+npm start
+
+# Frontend only
+npm run dev
+
+# Backend only
+npm run server:dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+## ☁️ Netlify Deployment
+
+### Build Settings
+- **Base directory:** `dashboard/CPC357-Assignment2`
+- **Build command:** `npm run build`
+- **Publish directory:** `dist`
+
+### Environment Variables
+Add in Netlify dashboard:
+```
+VITE_API_URL=https://your-backend-url/api
+VITE_MAPS_API_KEY=your-google-maps-key
+```
+
+After adding variables, trigger: **Deploys → Clear cache and deploy site**
+
+### Backend Deployment
+Deploy Express server (`server/`) to Google Cloud Run/App Engine/VM.
+
+Configure CORS in `server/index.ts`:
+```typescript
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://smart-bin-cpc357.netlify.app'
+    'https://your-domain-name.netlify.app'
   ]
 }));
 ```
 
----
+## 📊 Technology Stack
 
-## 🧠 Technology Stack
-
-| Category | Technology |
-|----------|------------|
-| Frontend | React 18, TypeScript, Vite |
-| Backend  | Express.js (TypeScript) |
+| Component | Technology |
+|-----------|-----------|
+| Frontend | React 18 + TypeScript + Vite |
+| Backend | Express.js + TypeScript |
 | Database | MongoDB Atlas |
-| Styling  | Tailwind CSS |
-| Maps     | Google Maps API |
-| HTTP     | Axios |
+| Styling | Tailwind CSS v3 |
+| Maps | Google Maps API |
+| HTTP Client | Axios |
+| Build Tool | Vite |
 
----
+## 🔧 Configuration
 
-## 🔌 API Overview (server)
+### Change Polling Intervals
+Edit `src/App.tsx`:
+```typescript
+// Poll for detections every 10 seconds
+const interval = setInterval(loadDetections, 10000)
 
-- `GET /api/health` – health check
-- `GET /api/detections?limit=200` – recent detections
-- `GET /api/bins` – all bins
-- `GET /api/bins/:binId` – single bin
-- `POST /api/commands` – queue command for bin
-- `PATCH /api/bins/:binId` – update bin
-- Webhooks for IoT:
-  - `POST /api/webhook/detection` – camera detection payload
-  - `POST /api/webhook/bin-update` – sensor data/update
+// Poll for bins every 5 seconds
+const interval = setInterval(loadBins, 5000)
+```
 
----
-
-## 🛠️ Useful Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm install` | Install dependencies |
-| `npm start` | Start frontend + backend concurrently |
-| `npm run dev` | Frontend dev server (Vite) |
-| `npm run server:dev` | Backend dev server (nodemon + tsx) |
-| `npm run build` | Build frontend for production |
-| `npm run preview` | Preview built frontend locally |
+### Customize Dashboard Layout
+Edit `src/App.tsx` to modify:
+- Chart colors
+- Card layouts
+- Display limits
+- Filter options
