@@ -129,7 +129,7 @@ const TrashDetection = () => {
     return '';
   };
 
-  // Save detection to API/Mongo (via backend) and publish to MQTT for immediate servo control
+  // Save detection to API/Mongo (via backend) for immediate servo control
   const saveDetection = async (detection: TrashDetection) => {
     setIsSaving(true);
     try {
@@ -257,19 +257,8 @@ const TrashDetection = () => {
     predictions.forEach(prediction => {
       const [x, y, width, height] = prediction.bbox;
       
-      // TEMP: Show raw class names during testing
       const label = prediction.class;
       const emoji = '';
-      
-      /* Original category-based labeling - uncomment to restore
-      const category = getTrashCategory(prediction.class);
-      const label = category ? category.charAt(0).toUpperCase() + category.slice(1) : '';
-      const emoji = {
-        paper: '📄',
-        plastic: '🪣',
-        aluminium: '🥫'
-      }[category] || '';
-      */
 
       ctx.strokeStyle = '#10b981';
       ctx.lineWidth = 3;
@@ -296,8 +285,6 @@ const TrashDetection = () => {
       return () => clearInterval(interval);
     }
   }, [model, isModelLoading, isSaving, isInCooldown]);
-
-  /* category color/icon helpers removed in single-screen minimal view */
 
   return (
     <div className="vh-fixed h-[100vh] bg-gradient-to-br from-eco-50 via-white to-recycle-50 p-3 sm:p-4 md:p-5 lg:p-6 overflow-hidden">
